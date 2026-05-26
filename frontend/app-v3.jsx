@@ -992,6 +992,16 @@ function App() {
   const [mode, setMode] = useState("pvp");
   const [showFullList, setShowFullList] = useState(false);
 
+  // Force re-render when data.jsx finishes a refresh — see CustomEvent
+  // 'gamedata-updated' dispatched at the end of refreshAll(). Without this
+  // the React tree would stay stuck on the empty initial snapshot.
+  const [, setDataTick] = useState(0);
+  useEffect(() => {
+    const handler = () => setDataTick((v) => v + 1);
+    window.addEventListener("gamedata-updated", handler);
+    return () => window.removeEventListener("gamedata-updated", handler);
+  }, []);
+
   const players = window.GAME_DATA.RANKINGS[period][mode];
   const highlights = window.GAME_DATA.HIGHLIGHTS[period][mode];
   const safezone = window.GAME_DATA.SAFEZONE[period];

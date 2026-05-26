@@ -13,6 +13,7 @@ const leaderboardRouter = require('./routes/leaderboard');
 const killfeedRouter    = require('./routes/killfeed');
 const playersRouter     = require('./routes/players');
 const statsRouter       = require('./routes/stats');
+const safezoneRouter    = require('./routes/safezone');
 const adminRouter       = require('./routes/admin');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -46,6 +47,7 @@ async function bootstrap() {
   app.use('/api/killfeed', killfeedRouter);
   app.use('/api/players', playersRouter);
   app.use('/api/stats', statsRouter);
+  app.use('/api/safezone', safezoneRouter);
   app.use('/admin', adminRouter);
 
   // Default 404 + simple root for sanity check.

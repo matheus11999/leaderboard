@@ -74,23 +74,30 @@ function KillFeedV3() {
   const [open, setOpen] = useState(false);          // colapsado por padrão
   const [unread, setUnread] = useState(0);          // novos eventos enquanto fechado
 
+  // Refresh from live API whenever data.jsx finishes a refresh.
+  useEffect(() => {
+    const handler = () => {
+      const fresh = window.GAME_DATA.seedKillFeed();
+      setEvents((prev) => {
+        const prevTopId = prev[0]?.id;
+        const freshTopId = fresh[0]?.id;
+        if (freshTopId && freshTopId !== prevTopId) {
+          setNewId(freshTopId);
+          setUnread((u) => u + Math.max(0, fresh.length - prev.length));
+          setTimeout(() => setNewId(null), 1800);
+        }
+        return fresh;
+      });
+      setCounter(20);
+    };
+    window.addEventListener("gamedata-updated", handler);
+    return () => window.removeEventListener("gamedata-updated", handler);
+  }, []);
+
+  // Local countdown so the "NEXT REFRESH IN Ns" UI keeps ticking between fetches.
   useEffect(() => {
     const t = setInterval(() => {
-      setCounter((c) => {
-        if (c <= 1) {
-          setEvents((prev) => {
-            const aged = prev.map((e) => ({ ...e, minutesAgo: e.minutesAgo + 1 }));
-            const fresh = window.GAME_DATA.makeKillEvent(0);
-            setNewId(fresh.id);
-            setTimeout(() => setNewId(null), 1800);
-            return [fresh, ...aged].slice(0, 26);
-          });
-          // se fechado, incrementa contador de não-lidos
-          setUnread((u) => u + 1);
-          return 20;
-        }
-        return c - 1;
-      });
+      setCounter((c) => (c <= 1 ? 20 : c - 1));
     }, 1000);
     return () => clearInterval(t);
   }, []);

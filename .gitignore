@@ -1,0 +1,13 @@
+node_modules/
+pgdata/
+.env
+.env.local
+*.log
+nginx/ssl/*.pem
+nginx/ssl/*.crt
+nginx/ssl/*.key
+api/coverage/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

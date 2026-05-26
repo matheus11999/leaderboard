@@ -849,14 +849,36 @@ function SafezoneCard({ kind, data, periodLabel }) {
   const title = isSeller ? "MAIOR VENDEDOR" : "MAIOR COMPRADOR";
   const eyebrow = isSeller ? "SAFEZONE · COMÉRCIO" : "SAFEZONE · CONSUMO";
   const subjectLbl = isSeller ? "VENDEDOR" : "COMPRADOR";
-  const totalLbl = isSeller ? "TOTAL VENDIDO" : "TOTAL GASTO";
+  const totalLbl = isSeller ? "TOTAL ARRECADADO" : "TOTAL DESEMBOLSADO";
   const txLbl = isSeller ? "VENDAS" : "COMPRAS";
   const Icon = isSeller ? MoneyIcon : CartIcon;
-  const verb = isSeller ? "VENDEU" : "COMPROU";
+  const verb = isSeller ? "OPERADOR" : "CLIENTE";
+
+  // monta os dígitos do "vault counter"
+  const digits = data.total.toString().padStart(6, "0").split("");
+
+  // tier de raridade por item (mock determinístico)
+  const itemTier = (name, i) => {
+    const tiers = ["common", "rare", "legendary"];
+    const idx = Math.abs((name.charCodeAt(0) + i * 7) % tiers.length);
+    return tiers[idx];
+  };
 
   return (
     <article className={`sz sz-${kind}`}>
+      <div className="sz-bg-grid" aria-hidden="true" />
       <CornerMarks />
+
+      {/* Stamp rotated, ornamental */}
+      <div className={`sz-stamp sz-stamp-${kind}`} aria-hidden="true">
+        <span className="sz-stamp-line" />
+        <span className="sz-stamp-text">
+          {isSeller ? "TRADER OFICIAL" : "CLIENTE VIP"}
+        </span>
+        <span className="sz-stamp-sub">SAFEZONE · BR-01</span>
+        <span className="sz-stamp-line" />
+      </div>
+
       <header className="hl3-head">
         <span className="hl3-eyebrow">
           <span className="hl3-eyebrow-dot" />
@@ -890,36 +912,47 @@ function SafezoneCard({ kind, data, periodLabel }) {
         </div>
       </div>
 
-      <div className="sz-amount">
-        <div className="sz-amount-currency">R$</div>
-        <div className="sz-amount-val">{data.total.toLocaleString("pt-BR")}<span className="sz-amount-cents">,00</span></div>
-      </div>
-
-      <div className="sz-items">
-        <div className="sz-items-head">
-          <span className="sz-items-line" />
-          <span className="sz-items-label">TOP {isSeller ? "VENDAS" : "COMPRAS"}</span>
-          <span className="sz-items-line" />
+      {/* Vault counter — display de cofre em destaque */}
+      <div className="sz-vault" aria-label={formatBRL(data.total)}>
+        <div className="sz-vault-bg" aria-hidden="true">
+          <svg viewBox="0 0 200 80" width="100%" height="100%" preserveAspectRatio="none">
+            <defs>
+              <pattern id={`sz-money-${kind}`} x="0" y="0" width="40" height="20" patternUnits="userSpaceOnUse">
+                <rect x="2" y="2" width="36" height="16" fill="none" stroke="currentColor" strokeWidth="0.5" />
+                <circle cx="20" cy="10" r="3" fill="none" stroke="currentColor" strokeWidth="0.5" />
+                <line x1="2" y1="10" x2="9" y2="10" stroke="currentColor" strokeWidth="0.4" />
+                <line x1="31" y1="10" x2="38" y2="10" stroke="currentColor" strokeWidth="0.4" />
+              </pattern>
+            </defs>
+            <rect width="200" height="80" fill={`url(#sz-money-${kind})`} />
+          </svg>
         </div>
-        <ul className="sz-items-list">
-          {data.topItems.map((item, i) => (
-            <li key={i} className="sz-items-row">
-              <span className="sz-items-rank">#{i + 1}</span>
-              <span className="sz-items-name">{item.name}</span>
-              <span className="sz-items-qty">×{item.qty}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
 
-      <div className="hl3-info">
-        <div className="hl3-info-cell">
-          <span className="hl3-info-lbl">{totalLbl}</span>
-          <span className="hl3-info-val mono">{formatBRL(data.total)}</span>
+        <div className="sz-vault-head">
+          <span className="sz-vault-head-dot" />
+          <span className="sz-vault-head-lbl">{totalLbl}</span>
+          <span className="sz-vault-head-period">· {periodLabel}</span>
         </div>
-        <div className="hl3-info-cell hl3-info-cell-r">
-          <span className="hl3-info-lbl">MÉDIA / {txLbl.slice(0,-1)}</span>
-          <span className="hl3-info-val mono">{formatBRL(Math.round(data.total / data.transactions))}</span>
+
+        <div className="sz-vault-display">
+          <span className="sz-vault-currency">R$</span>
+          <span className="sz-vault-num">
+            {data.total.toLocaleString("pt-BR")}
+            <span className="sz-vault-cents">,00</span>
+          </span>
+        </div>
+
+        <div className="sz-vault-foot">
+          <span className="sz-vault-foot-cell">
+            <span className="sz-vault-foot-dot" />
+            <span className="sz-vault-foot-lbl">TRANSAÇÕES</span>
+            <span className="sz-vault-foot-val">{data.transactions}</span>
+          </span>
+          <span className="sz-vault-foot-cell">
+            <span className="sz-vault-foot-dot" />
+            <span className="sz-vault-foot-lbl">RANKING</span>
+            <span className="sz-vault-foot-val">#1 GERAL</span>
+          </span>
         </div>
       </div>
     </article>

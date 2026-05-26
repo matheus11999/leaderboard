@@ -48,6 +48,9 @@ async function bootstrap() {
   app.use('/api/players', playersRouter);
   app.use('/api/stats', statsRouter);
   app.use('/api/safezone', safezoneRouter);
+  app.use('/api/admin', adminRouter);
+  // Back-compat: keep legacy /admin/* mounted too so old clients/tests
+  // (e.g. /admin/health probes) keep working.
   app.use('/admin', adminRouter);
 
   // Default 404 + simple root for sanity check.

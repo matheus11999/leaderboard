@@ -216,7 +216,49 @@ function CommandBar({ period, setPeriod, mode, setMode }) {
 // ===================================================================
 // TOP 3 — Character cards
 // ===================================================================
+const EMPTY_PLAYER = {
+  uid: "",
+  rank: 0,
+  nick: "-",
+  region: "-",
+  kills: 0,
+  deaths: 0,
+  kd: "0.00",
+  aliveMin: 0,
+  headshotPct: 0,
+  favWeapon: "-",
+  longestShot: { dist: 0, weapon: "-" },
+};
+
+function normalizePlayer(player) {
+  const source = player || {};
+  const shot = source.longestShot || {};
+  const kills = Number(source.kills != null ? source.kills : source.value);
+  const deaths = Number(source.deaths);
+  const kd = source.kd != null
+    ? source.kd
+    : ((kills || 0) / Math.max(deaths || 0, 1)).toFixed(2);
+
+  return {
+    ...EMPTY_PLAYER,
+    ...source,
+    nick: source.nick || source.name || EMPTY_PLAYER.nick,
+    region: source.region || EMPTY_PLAYER.region,
+    kills: Number.isFinite(kills) ? kills : EMPTY_PLAYER.kills,
+    deaths: Number.isFinite(deaths) ? deaths : EMPTY_PLAYER.deaths,
+    kd,
+    aliveMin: Number.isFinite(Number(source.aliveMin)) ? Number(source.aliveMin) : EMPTY_PLAYER.aliveMin,
+    headshotPct: Number.isFinite(Number(source.headshotPct)) ? Number(source.headshotPct) : EMPTY_PLAYER.headshotPct,
+    favWeapon: source.favWeapon || EMPTY_PLAYER.favWeapon,
+    longestShot: {
+      dist: Number.isFinite(Number(shot.dist)) ? Number(shot.dist) : EMPTY_PLAYER.longestShot.dist,
+      weapon: shot.weapon || EMPTY_PLAYER.longestShot.weapon,
+    },
+  };
+}
+
 function CharCard({ place, player }) {
+  const safePlayer = normalizePlayer(player);
   const labels = { 1: "01", 2: "02", 3: "03" };
   const titles = { 1: "CAMPEÃO", 2: "VICE-LÍDER", 3: "TERCEIRO" };
 
@@ -246,7 +288,7 @@ function CharCard({ place, player }) {
           <span className="cc-rank-num">{labels[place]}</span>
         </div>
         <div className="cc-rank-meta">
-          <span className="cc-region">{player.region}</span>
+          <span className="cc-region">{safePlayer.region}</span>
           <span className="cc-tag">{titles[place]}</span>
         </div>
       </header>
@@ -259,24 +301,24 @@ function CharCard({ place, player }) {
           <span>JOGADOR</span>
           <span className="cc-id-line" />
         </div>
-        <h3 className="cc-nick">{player.nick}</h3>
+        <h3 className="cc-nick">{safePlayer.nick}</h3>
       </div>
 
       <div className="cc-stats">
         <div className="cc-stat">
-          <span className="cc-stat-val">{player.kills}</span>
+          <span className="cc-stat-val">{safePlayer.kills}</span>
           <span className="cc-stat-lbl">KILLS</span>
         </div>
         <div className="cc-stat">
-          <span className="cc-stat-val">{player.deaths}</span>
+          <span className="cc-stat-val">{safePlayer.deaths}</span>
           <span className="cc-stat-lbl">MORTES</span>
         </div>
         <div className="cc-stat cc-stat-kd">
-          <span className="cc-stat-val accent">{player.kd}</span>
+          <span className="cc-stat-val accent">{safePlayer.kd}</span>
           <span className="cc-stat-lbl">K/D</span>
         </div>
         <div className="cc-stat">
-          <span className="cc-stat-val">{player.headshotPct}<i>%</i></span>
+          <span className="cc-stat-val">{safePlayer.headshotPct}<i>%</i></span>
           <span className="cc-stat-lbl">HEADSHOT</span>
         </div>
       </div>
@@ -286,11 +328,11 @@ function CharCard({ place, player }) {
           <span className="cc-shot-icon"><CrosshairIcon size={14} /></span>
           <div className="cc-shot-text">
             <span className="cc-shot-lbl">MELHOR TIRO</span>
-            <span className="cc-shot-wpn">{player.longestShot.weapon}</span>
+            <span className="cc-shot-wpn">{safePlayer.longestShot.weapon}</span>
           </div>
         </div>
         <div className="cc-shot-r">
-          <span className="cc-shot-dist">{player.longestShot.dist}<i>m</i></span>
+          <span className="cc-shot-dist">{safePlayer.longestShot.dist}<i>m</i></span>
         </div>
       </div>
 
@@ -299,12 +341,12 @@ function CharCard({ place, player }) {
           <span className="cc-foot-lbl">ARMA PRIMÁRIA</span>
           <span className="cc-foot-val">
             <CrosshairIcon size={12} />
-            {player.favWeapon}
+            {safePlayer.favWeapon}
           </span>
         </div>
         <div className="cc-foot-row">
           <span className="cc-foot-lbl">TEMPO VIVO</span>
-          <span className="cc-foot-val mono">{window.GAME_DATA.formatAlive(player.aliveMin)}</span>
+          <span className="cc-foot-val mono">{window.GAME_DATA.formatAlive(safePlayer.aliveMin)}</span>
         </div>
       </footer>
     </article>
@@ -312,7 +354,8 @@ function CharCard({ place, player }) {
 }
 
 function CharCardRow({ players }) {
-  const [first, second, third] = players;
+  const safePlayers = players || [];
+  const [first, second, third] = [0, 1, 2].map((index) => normalizePlayer(safePlayers[index]));
   return (
     <div className="cc-row">
       <CharCard place={2} player={second} />
@@ -324,6 +367,7 @@ function CharCardRow({ players }) {
 
 // === Pódio Clássico ===
 function PodiumBlock({ place, player }) {
+  const safePlayer = normalizePlayer(player);
   const heights = { 1: 280, 2: 200, 3: 160 };
   const labels = { 1: "01", 2: "02", 3: "03" };
   const titles = { 1: "CAMPEÃO", 2: "VICE", 3: "TERCEIRO" };
@@ -331,12 +375,12 @@ function PodiumBlock({ place, player }) {
     <div className={`pdm pdm-${place}`}>
       <div className="pdm-meta">
         <div className="pdm-title">{titles[place]}</div>
-        <div className="pdm-nick">{player.nick}</div>
-        <div className="pdm-region">{player.region}</div>
+        <div className="pdm-nick">{safePlayer.nick}</div>
+        <div className="pdm-region">{safePlayer.region}</div>
         <div className="pdm-stats">
-          <div><span>{player.kills}</span><label>KILLS</label></div>
-          <div><span>{player.deaths}</span><label>MORTES</label></div>
-          <div><span className="accent">{player.kd}</span><label>K/D</label></div>
+          <div><span>{safePlayer.kills}</span><label>KILLS</label></div>
+          <div><span>{safePlayer.deaths}</span><label>MORTES</label></div>
+          <div><span className="accent">{safePlayer.kd}</span><label>K/D</label></div>
         </div>
       </div>
       <div className="pdm-tower" style={{ height: heights[place] }}>
@@ -349,7 +393,8 @@ function PodiumBlock({ place, player }) {
 }
 
 function PodiumClassic({ players }) {
-  const [first, second, third] = players;
+  const safePlayers = players || [];
+  const [first, second, third] = [0, 1, 2].map((index) => normalizePlayer(safePlayers[index]));
   return (
     <div className="pdm-row">
       <PodiumBlock place={2} player={second} />

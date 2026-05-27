@@ -20,6 +20,13 @@ module.exports = async function (data) {
   const weapon = data.weapon || {};
   const stats = data.victim_stats || {};
   const pos = victim.position || {};
+  const distanceM = Number(data.distance_m);
+  const safeDistanceM = Number.isFinite(distanceM) ? distanceM : null;
+  const safeDistanceInt = Number.isFinite(distanceM) ? Math.round(distanceM) : 0;
+  const aliveSeconds = Number(data.alive_seconds);
+  const safeAliveSeconds = Number.isFinite(aliveSeconds) ? Math.round(aliveSeconds) : null;
+  const hydration = Number(stats.hydration);
+  const energy = Number(stats.energy);
 
   const killerType = (killer.type || 'environment').toLowerCase();
   const deathCol = DEATH_COLUMN[killerType] || 'deaths_env';
@@ -72,12 +79,12 @@ module.exports = async function (data) {
         killer.prefab || null,
         weapon.name || null,
         weapon.prefab || null,
-        Number.isFinite(data.distance_m) ? data.distance_m : null,
+        safeDistanceM,
         !!data.is_pvp,
         !!data.is_suicide,
-        Number.isFinite(data.alive_seconds) ? data.alive_seconds : null,
-        Number.isFinite(stats.hydration) ? stats.hydration : null,
-        Number.isFinite(stats.energy) ? stats.energy : null,
+        safeAliveSeconds,
+        Number.isFinite(hydration) ? hydration : null,
+        Number.isFinite(energy) ? energy : null,
         typeof stats.bleeding === 'boolean' ? stats.bleeding : null,
       ]
     );
@@ -90,7 +97,7 @@ module.exports = async function (data) {
          longest_life_s = GREATEST(longest_life_s, COALESCE($1, 0)),
          last_seen      = NOW()
        WHERE uid = $2`,
-      [data.alive_seconds || 0, victim.uid]
+      [safeAliveSeconds || 0, victim.uid]
     );
 
     // Bump killer counters if a player killed (not suicide).
@@ -101,7 +108,7 @@ module.exports = async function (data) {
            longest_shot_m = GREATEST(longest_shot_m, COALESCE($1, 0)),
            last_seen      = NOW()
          WHERE uid = $2`,
-        [Number.isFinite(data.distance_m) ? data.distance_m : 0, killerUid]
+        [safeDistanceInt, killerUid]
       );
     }
   });

@@ -12,22 +12,29 @@ router.get('/', async (req, res) => {
 
   const since = req.query.since;
   const params = [limit];
-  const conds = ['is_suicide = false'];
+  const conds = ['k.is_suicide = false'];
   if (since) {
-    conds.push(`occurred_at > $2`);
+    conds.push(`k.occurred_at > $2`);
     params.push(since);
   }
   const where = `WHERE ${conds.join(' AND ')}`;
 
   try {
     const r = await db.query(
-      `SELECT id, occurred_at, victim_uid, victim_name, victim_prefab,
-              killer_type, killer_uid, killer_name, killer_prefab,
+      `SELECT k.id, k.occurred_at, k.victim_uid, k.victim_name, k.victim_prefab,
+              k.killer_type, k.killer_uid, k.killer_name, k.killer_prefab,
               weapon_name, weapon_prefab,
-              distance_m, is_pvp, is_suicide, victim_alive_s
-         FROM kills
+              k.distance_m, k.is_pvp, k.is_suicide, k.victim_alive_s,
+              EXISTS (
+                SELECT 1
+                  FROM bounty_events b
+                 WHERE b.target_uid = k.victim_uid
+                   AND b.hunter_uid = k.killer_uid
+                   AND ABS(EXTRACT(EPOCH FROM (b.occurred_at - k.occurred_at))) <= 5
+              ) AS is_bounty_kill
+         FROM kills k
          ${where}
-        ORDER BY occurred_at DESC
+        ORDER BY k.occurred_at DESC
         LIMIT $1`,
       params
     );

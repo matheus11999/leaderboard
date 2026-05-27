@@ -50,7 +50,7 @@ function KFRow({ ev, isNew }) {
     ev.dist >= 150 ? "mid"     : "close";
 
   return (
-    <li className={`kf-row ${ev.type} ${isNew ? "kf-new" : ""}`}>
+    <li className={`kf-row ${ev.type} ${ev.isBountyKill ? "is-bounty-kill" : ""} ${isNew ? "kf-new" : ""}`}>
       <div className="kf-rail" aria-hidden="true">
         <span className="kf-rail-dot" />
         <span className="kf-rail-line" />
@@ -59,6 +59,7 @@ function KFRow({ ev, isNew }) {
         <div className="kf-tags">
           <span className="kf-time">{timeAgo(ev.minutesAgo)}</span>
           <span className={`kf-tag ${ev.type}`}>{ev.isSuicide ? "SUICIDIO" : (ev.type === "pve" ? "PvE" : "PvP")}</span>
+          {ev.isBountyKill && <span className="kf-bounty-tag">$ CAÇADA</span>}
           {ev.dist > 0 && (
             <span className={`kf-dist-badge tier-${distTier}`}>
               <span className="kf-dist-icon" aria-hidden="true">

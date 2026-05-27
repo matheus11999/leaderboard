@@ -177,6 +177,7 @@ function mapKillFeedRow(row) {
     id: String(row.id),
     type: row.is_suicide ? "suicide" : (row.is_pvp ? "pvp" : "pve"),
     isSuicide: !!row.is_suicide,
+    isBountyKill: !!row.is_bounty_kill,
     killer: row.killer_name || "—",
     victim: row.victim_name || "—",
     weapon: cleanWeaponName(row.weapon_name),

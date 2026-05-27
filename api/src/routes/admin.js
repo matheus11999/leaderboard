@@ -74,7 +74,7 @@ router.get('/overview', async (_req, res) => {
       db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true`),
       db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours'`),
       db.query(`SELECT COUNT(*)::INT AS n FROM shop_events`),
-      db.query(`SELECT COALESCE(SUM(price * quantity), 0)::BIGINT AS total FROM shop_events WHERE success = true`),
+      db.query(`SELECT COALESCE(SUM(price), 0)::BIGINT AS total FROM shop_events WHERE success = true`),
       db.query(`SELECT COUNT(*)::INT AS n FROM missions`),
       db.query(`SELECT COUNT(*)::INT AS n FROM missions WHERE ended_at IS NULL`),
       db.query(`SELECT COUNT(*)::INT AS n FROM events_raw`),
@@ -162,7 +162,12 @@ router.get('/bounty/rewards', async (req, res) => {
   try {
     const rowsR = await db.query(
       `SELECT id, occurred_at, server_id, target_name, hunter_name,
-              target_streak, bounty_value, claimed, claimed_at
+              target_streak, bounty_value, bounty_started_at,
+              CASE
+                WHEN bounty_started_at IS NULL THEN NULL
+                ELSE GREATEST(0, EXTRACT(EPOCH FROM (occurred_at - bounty_started_at))::INT)
+              END AS duration_s,
+              claimed, claimed_at
          FROM bounty_events
          ${where}
         ORDER BY occurred_at DESC

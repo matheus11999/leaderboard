@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
       const r = await db.query(
         `SELECT se.player_uid AS uid,
                 COALESCE(NULLIF(p.name, ''), NULLIF(MAX(se.player_name), ''), se.player_uid, '-') AS name,
-                SUM(se.price * se.quantity)::INT AS total,
+                SUM(se.price)::INT AS total,
                 COUNT(*)::INT AS transactions
            FROM shop_events se
            LEFT JOIN players p ON p.uid = se.player_uid

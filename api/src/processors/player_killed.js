@@ -80,7 +80,7 @@ module.exports = async function (data, envelope = {}) {
     }
 
     const victimBefore = await c.query(
-      `SELECT current_kill_streak, bounty_active, bounty_value
+      `SELECT current_kill_streak, bounty_active, bounty_value, bounty_started_at
          FROM players
         WHERE uid = $1`,
       [victim.uid]
@@ -133,8 +133,9 @@ module.exports = async function (data, envelope = {}) {
       await c.query(
         `INSERT INTO bounty_events (
            server_id, target_uid, target_name, hunter_uid, hunter_name,
-           target_streak, bounty_value, weapon_name, weapon_prefab, distance_m
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+           target_streak, bounty_value, weapon_name, weapon_prefab, distance_m,
+           bounty_started_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           serverId,
           victim.uid,
@@ -146,6 +147,7 @@ module.exports = async function (data, envelope = {}) {
           weapon.name || null,
           weapon.prefab || null,
           safeDistanceM,
+          victimState.bounty_started_at || null,
         ]
       );
     }

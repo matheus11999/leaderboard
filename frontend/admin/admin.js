@@ -287,6 +287,7 @@ async function loadBounty() {
       { key: 'target_name', label: 'ALVO' },
       { key: 'target_streak', label: 'SEQ ALVO' },
       { key: 'bounty_value', label: 'VALOR', render: v => formatBRL(v) },
+      { key: 'duration_s', label: 'TEMPO', render: v => v == null ? 'â€”' : fmtSeconds(v) },
       { key: 'claimed', label: 'STATUS', render: v => v ? '<span class="pill is-ok">PAGO</span>' : '<span class="pill is-warn">PENDENTE</span>' },
       { key: 'claimed_at', label: 'PAGO EM', render: v => v ? fmtDate(v) : '—' },
     ], d.rows, []);

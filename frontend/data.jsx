@@ -230,7 +230,7 @@ async function getJson(url, opts) {
 // -------------------------------------------------------------------
 async function fetchKillFeedLive() {
   try {
-    const data = await getJson("/api/killfeed?limit=50", { cache: "no-store" });
+    const data = await getJson("/api/killfeed?limit=200", { cache: "no-store" });
     KILL_FEED.length = 0;
     for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
     window.dispatchEvent(new CustomEvent("killfeed-updated"));
@@ -299,6 +299,8 @@ async function fetchBounties() {
     weapon: cleanWeaponName(r.weapon_name),
     dist: Math.round(Number(r.distance_m) || 0),
     occurredAt: r.occurred_at || null,
+    startedAt: r.bounty_started_at || null,
+    durationS: Number.isFinite(Number(r.duration_s)) ? Number(r.duration_s) : null,
     claimed: !!r.claimed,
     claimedAt: r.claimed_at || null,
   }));

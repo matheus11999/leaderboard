@@ -316,6 +316,20 @@ function relativeTime(value) {
   return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
 }
 
+function formatHuntDuration(seconds) {
+  const total = Number(seconds);
+  if (!Number.isFinite(total) || total < 0) return "—";
+  const minutes = Math.floor(total / 60);
+  if (minutes < 1) return "menos de 1m";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours < 1) return `${minutes}m`;
+  if (hours < 24) return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`;
+}
+
 function HuntCard({ bounties }) {
   const { formatBRL } = window.GAME_DATA;
   const [showHunts, setShowHunts] = useState(false);
@@ -422,6 +436,7 @@ function HuntCard({ bounties }) {
                     {c.claimed ? "PAGO" : "PENDENTE"}
                   </span>
                   <span>{formatBRL(c.value)}</span>
+                  <span>tempo {formatHuntDuration(c.durationS)}</span>
                   <span>finalizou ha {relativeTime(c.occurredAt)}</span>
                   {c.weapon && c.weapon !== "—" && <span>{c.weapon}</span>}
                   {c.dist > 0 && <span>{c.dist}m</span>}

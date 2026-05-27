@@ -34,11 +34,13 @@ async function ensureSchema() {
        weapon_name TEXT,
        weapon_prefab TEXT,
        distance_m REAL,
+       bounty_started_at TIMESTAMPTZ,
        claimed BOOL NOT NULL DEFAULT false,
        claimed_at TIMESTAMPTZ,
        claim_note TEXT
      )`,
     `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS bounty_started_at TIMESTAMPTZ`,
     `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ`,
     `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS claim_note TEXT`,
     `ALTER TABLE bounty_events ALTER COLUMN claimed SET DEFAULT false`,

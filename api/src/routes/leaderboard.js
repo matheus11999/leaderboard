@@ -108,9 +108,13 @@ router.get('/', async (req, res) => {
       }
       case 'longest_life': {
         const r = await db.query(
-          `SELECT victim_uid AS uid, victim_name AS name, victim_alive_s AS value, occurred_at
+          `SELECT victim_uid AS uid,
+                  (ARRAY_AGG(victim_name ORDER BY occurred_at DESC))[1] AS name,
+                  MAX(victim_alive_s)::INT AS value,
+                  MAX(occurred_at) AS occurred_at
              FROM kills
-            WHERE victim_alive_s > 0 ${sinceClause}
+            WHERE victim_uid IS NOT NULL AND victim_alive_s > 0 ${sinceClause}
+            GROUP BY victim_uid
             ORDER BY value DESC
             LIMIT $1`,
           [limit]

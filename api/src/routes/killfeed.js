@@ -11,11 +11,14 @@ router.get('/', async (req, res) => {
   limit = Math.min(Math.floor(limit), 200);
 
   const since = req.query.since;
+  const type = String(req.query.type || '').toLowerCase();
   const params = [limit];
   const conds = ['k.is_suicide = false'];
+  if (type === 'pvp') conds.push('k.is_pvp = true');
+  else if (type === 'pve') conds.push('k.is_pvp = false');
   if (since) {
-    conds.push(`k.occurred_at > $2`);
     params.push(since);
+    conds.push(`k.occurred_at > $${params.length}`);
   }
   const where = `WHERE ${conds.join(' AND ')}`;
 

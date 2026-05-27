@@ -37,6 +37,11 @@ router.get('/completed', async (req, res) => {
     const r = await db.query(
       `SELECT id, occurred_at, target_uid, target_name, hunter_uid, hunter_name,
               target_streak, bounty_value, weapon_name, weapon_prefab, distance_m,
+              bounty_started_at,
+              CASE
+                WHEN bounty_started_at IS NULL THEN NULL
+                ELSE GREATEST(0, EXTRACT(EPOCH FROM (occurred_at - bounty_started_at))::INT)
+              END AS duration_s,
               claimed, claimed_at
          FROM bounty_events
         ORDER BY occurred_at DESC

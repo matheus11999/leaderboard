@@ -9,6 +9,7 @@ const playerConnected    = require('../processors/player_connected');
 const playerDisconnected = require('../processors/player_disconnected');
 const playerSpawned      = require('../processors/player_spawned');
 const playerKilled       = require('../processors/player_killed');
+const npcKilled          = require('../processors/npc_killed');
 const shopEvent          = require('../processors/shop_event');
 const missionEvent       = require('../processors/mission_event');
 
@@ -17,6 +18,7 @@ const PROCESSORS = {
   player_disconnected: playerDisconnected,
   player_spawned:      playerSpawned,
   player_killed:       playerKilled,
+  npc_killed:          npcKilled,
   shop_purchase:        shopEvent,
   shop_purchase_failed: shopEvent,
   shop_sale:            shopEvent,

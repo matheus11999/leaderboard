@@ -492,7 +492,7 @@ function SafezoneSection({ data, period }) {
 // ===================================================================
 // RankTable — 5 filtros
 // ===================================================================
-function RankTable({ period }) {
+function RankTable({ period, dataTick }) {
   const { formatAlive, RANKINGS, SAFEZONE } = window.GAME_DATA;
   const [filter, setFilter] = useState("pvp");
 
@@ -521,7 +521,7 @@ function RankTable({ period }) {
       }));
     }
     return RANKINGS[period].pvp.slice(0, 10);
-  }, [filter, period]);
+  }, [filter, period, dataTick]);
 
   const filterTitle = {
     pvp: "TOP PvP", pve: "TOP PvE",
@@ -637,7 +637,7 @@ function App() {
           </section>
 
           <SafezoneSection data={safezone} period={period} />
-          <RankTable period={period} />
+          <RankTable period={period} dataTick={tick} />
 
           <footer className="page-foot">
             <div className="page-foot-line">

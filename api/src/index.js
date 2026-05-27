@@ -13,6 +13,7 @@ const ingestRouter      = require('./routes/ingest');
 const leaderboardRouter = require('./routes/leaderboard');
 const killfeedRouter    = require('./routes/killfeed');
 const bountiesRouter    = require('./routes/bounties');
+const rewardsRouter     = require('./routes/rewards');
 const playersRouter     = require('./routes/players');
 const statsRouter       = require('./routes/stats');
 const safezoneRouter    = require('./routes/safezone');
@@ -46,6 +47,7 @@ async function bootstrap() {
 
   // Routes
   app.use('/v1/arma/events', ingestRouter);
+  app.use('/v1/arma/rewards', rewardsRouter);
   app.use('/api/leaderboard', leaderboardRouter);
   app.use('/api/killfeed', killfeedRouter);
   app.use('/api/bounties', bountiesRouter);

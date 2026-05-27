@@ -64,7 +64,7 @@ router.post('/', async (req, res) => {
   }
 
   try {
-    await proc(e.data);
+    await proc(e.data, e);
     await db.query('UPDATE events_raw SET processed = true WHERE id = $1', [rawId]);
   } catch (err) {
     logger.error(`ingest: processor ${e.event_type} failed:`, err.message);

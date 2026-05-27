@@ -36,7 +36,8 @@ router.get('/completed', async (req, res) => {
   try {
     const r = await db.query(
       `SELECT id, occurred_at, target_uid, target_name, hunter_uid, hunter_name,
-              target_streak, bounty_value, weapon_name, weapon_prefab, distance_m, claimed
+              target_streak, bounty_value, weapon_name, weapon_prefab, distance_m,
+              claimed, claimed_at
          FROM bounty_events
         ORDER BY occurred_at DESC
         LIMIT $1`,

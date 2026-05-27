@@ -2,10 +2,6 @@
 
 const db = require('../db');
 
-const BOUNTY_THRESHOLD = Number(process.env.BOUNTY_THRESHOLD) || 5;
-const BOUNTY_BASE_VALUE = Number(process.env.BOUNTY_BASE_VALUE) || 5000;
-const BOUNTY_EXTRA_KILL_VALUE = Number(process.env.BOUNTY_EXTRA_KILL_VALUE) || 1000;
-
 // Map README killer_type → players column to increment.
 const DEATH_COLUMN = {
   player: 'deaths_pvp',
@@ -16,12 +12,19 @@ const DEATH_COLUMN = {
   suicide: 'deaths_suicide',
 };
 
-function bountyValueForStreak(streak) {
-  if (streak < BOUNTY_THRESHOLD) return 0;
-  return BOUNTY_BASE_VALUE + Math.max(0, streak - BOUNTY_THRESHOLD) * BOUNTY_EXTRA_KILL_VALUE;
+function bountyValueForStreak(streak, settings) {
+  if (!settings?.enabled) return 0;
+
+  const minKills = Math.max(1, Number(settings.min_kills) || 5);
+  const baseValue = Math.max(0, Number(settings.base_value) || 0);
+  const increasePct = Math.max(0, Number(settings.increase_pct) || 0);
+  if (streak < minKills || baseValue <= 0) return 0;
+
+  const extraKills = Math.max(0, streak - minKills);
+  return Math.min(10_000_000, Math.round(baseValue * Math.pow(1 + increasePct / 100, extraKills)));
 }
 
-module.exports = async function (data) {
+module.exports = async function (data, envelope = {}) {
   const victim = data?.victim;
   if (!victim?.uid) return;
 
@@ -39,8 +42,21 @@ module.exports = async function (data) {
 
   const killerType = (killer.type || 'environment').toLowerCase();
   const deathCol = DEATH_COLUMN[killerType] || 'deaths_env';
+  const serverId = String(envelope.server_id || data.server_id || 'default');
 
   await db.tx(async (c) => {
+    const settingsR = await c.query(
+      `SELECT enabled, min_kills, base_value, increase_pct
+         FROM bounty_settings
+        WHERE id = true`
+    );
+    const bountySettings = settingsR.rows[0] || {
+      enabled: true,
+      min_kills: 5,
+      base_value: 5000,
+      increase_pct: 20,
+    };
+
     // Make sure victim row exists (defensive — should be from player_connected).
     await c.query(
       `INSERT INTO players (uid, name)
@@ -114,10 +130,11 @@ module.exports = async function (data) {
     ) {
       await c.query(
         `INSERT INTO bounty_events (
-           target_uid, target_name, hunter_uid, hunter_name,
+           server_id, target_uid, target_name, hunter_uid, hunter_name,
            target_streak, bounty_value, weapon_name, weapon_prefab, distance_m
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
+          serverId,
           victim.uid,
           victim.name || 'Unknown',
           killerUid,
@@ -161,7 +178,7 @@ module.exports = async function (data) {
       );
 
       const newStreak = Number(streakR.rows[0]?.current_kill_streak) || 0;
-      const bountyValue = bountyValueForStreak(newStreak);
+      const bountyValue = bountyValueForStreak(newStreak, bountySettings);
       if (bountyValue > 0) {
         await c.query(
           `UPDATE players SET

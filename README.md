@@ -56,13 +56,6 @@ docker compose up -d
    - `ADMIN_PASSWORD`
 7. Deploy
 
-The mod's `BZ_PortalConfig.c` should set:
-```c
-static const string ENDPOINT_URL = "http://62.171.171.45/v1/arma/events";
-static const string API_KEY = "<INGEST_API_KEY value>";
-static const string SERVER_ID = "brasilz-main";
-```
-
 ## Repo layout
 
 ```
@@ -93,6 +86,36 @@ Events handled:
 - `player_connected` / `player_disconnected` / `player_spawned` / `player_killed`
 - `shop_purchase` / `shop_purchase_failed` / `shop_sale`
 - `mission_started` / `mission_ended`
+
+## Portal rewards and bounty config
+
+Server-only endpoints protected by `X-BrasilZ-Api-Key`:
+
+- `GET /v1/arma/rewards/pending?server_id=brasilz-main`
+- `POST /v1/arma/rewards/claim`
+- `GET/PATCH /admin/bounty/settings`
+- `GET /admin/bounty/rewards?claimed=true|false`
+
+The mod reads `$profile:BrasilZ/Portal/Config.json`. New installs generate empty
+`endpoint_url`, `rewards_url`, and `api_key` values so secrets stay outside the
+source code.
+
+```json
+{
+  "endpoint_url": "https://your-domain/v1/arma/events",
+  "rewards_url": "https://your-domain/v1/arma/rewards",
+  "api_key": "<INGEST_API_KEY value>",
+  "server_id": "brasilz-main",
+  "schema_version": "1.0",
+  "rewards_poll_interval_ms": 30000
+}
+```
+
+If `rewards_url` is blank, the mod derives it from `endpoint_url`. The admin
+BOUNTY tab controls the minimum PvP streak, starting reward, and percentage
+increase per extra kill. When a hunted player dies to another player, the API
+creates a pending reward; the mod pays the online hunter wallet and then marks
+the reward as claimed.
 
 ## Frontend
 

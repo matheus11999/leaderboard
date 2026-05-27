@@ -43,6 +43,8 @@ module.exports = async function (data, envelope = {}) {
   const killerType = (killer.type || 'environment').toLowerCase();
   const deathCol = DEATH_COLUMN[killerType] || 'deaths_env';
   const serverId = String(envelope.server_id || data.server_id || 'default');
+  const isSuicide = data.is_suicide === true || data.is_suicide === 1 || data.is_suicide === 'true';
+  const rankedDeathIncrement = isSuicide ? 0 : 1;
 
   await db.tx(async (c) => {
     const settingsR = await c.query(
@@ -114,7 +116,7 @@ module.exports = async function (data, envelope = {}) {
         weapon.prefab || null,
         safeDistanceM,
         !!data.is_pvp,
-        !!data.is_suicide,
+        isSuicide,
         safeAliveSeconds,
         Number.isFinite(hydration) ? hydration : null,
         Number.isFinite(energy) ? energy : null,
@@ -126,7 +128,7 @@ module.exports = async function (data, envelope = {}) {
       victimState.bounty_active &&
       killerUid &&
       killerUid !== victim.uid &&
-      !data.is_suicide
+      !isSuicide
     ) {
       await c.query(
         `INSERT INTO bounty_events (
@@ -151,7 +153,7 @@ module.exports = async function (data, envelope = {}) {
     // Bump victim counters and reset any active PvP streak/bounty.
     await c.query(
       `UPDATE players SET
-         total_deaths   = total_deaths + 1,
+         total_deaths   = total_deaths + $2,
          ${deathCol}    = ${deathCol} + 1,
          longest_life_s = GREATEST(longest_life_s, COALESCE($1, 0)),
          current_kill_streak = 0,
@@ -159,12 +161,12 @@ module.exports = async function (data, envelope = {}) {
          bounty_value = 0,
          bounty_started_at = NULL,
          last_seen      = NOW()
-       WHERE uid = $2`,
-      [safeAliveSeconds || 0, victim.uid]
+       WHERE uid = $3`,
+      [safeAliveSeconds || 0, rankedDeathIncrement, victim.uid]
     );
 
     // Bump killer counters if a player killed another player (not suicide).
-    if (killerUid && !data.is_suicide && data.is_pvp) {
+    if (killerUid && !isSuicide && data.is_pvp) {
       const streakR = await c.query(
         `UPDATE players SET
            total_kills    = total_kills + 1,

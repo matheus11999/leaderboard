@@ -12,11 +12,12 @@ router.get('/', async (req, res) => {
 
   const since = req.query.since;
   const params = [limit];
-  let where = '';
+  const conds = ['is_suicide = false'];
   if (since) {
-    where = `WHERE occurred_at > $2`;
+    conds.push(`occurred_at > $2`);
     params.push(since);
   }
+  const where = `WHERE ${conds.join(' AND ')}`;
 
   try {
     const r = await db.query(

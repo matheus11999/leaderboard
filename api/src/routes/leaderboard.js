@@ -71,7 +71,7 @@ router.get('/', async (req, res) => {
         const r = await db.query(
           `SELECT killer_uid AS uid, killer_name AS name, COUNT(*)::INT AS value
              FROM kills
-            WHERE is_pvp = true AND killer_uid IS NOT NULL ${sinceClause}
+            WHERE is_pvp = true AND is_suicide = false AND killer_uid IS NOT NULL ${sinceClause}
             GROUP BY killer_uid, killer_name
             ORDER BY value DESC
             LIMIT $1`,
@@ -84,7 +84,7 @@ router.get('/', async (req, res) => {
         const r = await db.query(
           `SELECT killer_uid AS uid, killer_name AS name, COUNT(*)::INT AS value
              FROM kills
-            WHERE is_pvp = false AND killer_uid IS NOT NULL ${sinceClause}
+            WHERE is_pvp = false AND is_suicide = false AND killer_uid IS NOT NULL ${sinceClause}
             GROUP BY killer_uid, killer_name
             ORDER BY value DESC
             LIMIT $1`,
@@ -119,12 +119,12 @@ router.get('/', async (req, res) => {
         break;
       }
       case 'most_deaths': {
-        // Players global counters — no period filter applies cleanly.
         const r = await db.query(
-          `SELECT uid, name, total_deaths AS value
-             FROM players
-            WHERE total_deaths > 0
-            ORDER BY total_deaths DESC
+          `SELECT victim_uid AS uid, victim_name AS name, COUNT(*)::INT AS value
+             FROM kills
+            WHERE victim_uid IS NOT NULL AND is_suicide = false ${sinceClause}
+            GROUP BY victim_uid, victim_name
+            ORDER BY value DESC
             LIMIT $1`,
           [limit]
         );

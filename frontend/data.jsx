@@ -275,8 +275,8 @@ async function fetchSafezone(period) {
 
 async function fetchBounties() {
   const [active, completed] = await Promise.all([
-    getJson(`/api/bounties/active?limit=5`),
-    getJson(`/api/bounties/completed?limit=5`),
+    getJson(`/api/bounties/active?limit=20`),
+    getJson(`/api/bounties/completed?limit=20`),
   ]);
 
   BOUNTIES.active = (active.rows || []).map((r) => ({
@@ -286,6 +286,7 @@ async function fetchBounties() {
     bestStreak: Number(r.best_kill_streak) || 0,
     value: Number(r.bounty_value) || 0,
     since: r.bounty_started_at || null,
+    lastSeen: r.last_seen || null,
   }));
 
   BOUNTIES.completed = (completed.rows || []).map((r) => ({
@@ -297,6 +298,8 @@ async function fetchBounties() {
     weapon: cleanWeaponName(r.weapon_name),
     dist: Math.round(Number(r.distance_m) || 0),
     occurredAt: r.occurred_at || null,
+    claimed: !!r.claimed,
+    claimedAt: r.claimed_at || null,
   }));
 }
 

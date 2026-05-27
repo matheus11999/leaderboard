@@ -164,7 +164,8 @@ function mapKillFeedRow(row) {
   const minutesAgo = Math.max(0, Math.round((Date.now() - ts) / 60000));
   return {
     id: String(row.id),
-    type: row.is_pvp ? "pvp" : "pve",
+    type: row.is_suicide ? "suicide" : (row.is_pvp ? "pvp" : "pve"),
+    isSuicide: !!row.is_suicide,
     killer: row.killer_name || "—",
     victim: row.victim_name || "—",
     weapon: cleanWeaponName(row.weapon_name),

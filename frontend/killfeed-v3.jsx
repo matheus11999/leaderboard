@@ -34,6 +34,15 @@ function HSGlyph() {
   );
 }
 
+function SuicideGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1" />
+      <path d="M3.6 3.6l4.8 4.8M8.4 3.6L3.6 8.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function KFRow({ ev, isNew }) {
   const distTier =
     ev.dist >= 700 ? "extreme" :
@@ -49,7 +58,7 @@ function KFRow({ ev, isNew }) {
       <div className="kf-body">
         <div className="kf-tags">
           <span className="kf-time">{timeAgo(ev.minutesAgo)}</span>
-          <span className={`kf-tag ${ev.type}`}>{ev.type === "pve" ? "PvE" : "PvP"}</span>
+          <span className={`kf-tag ${ev.type}`}>{ev.isSuicide ? "SUICIDIO" : (ev.type === "pve" ? "PvE" : "PvP")}</span>
           {ev.dist > 0 && (
             <span className={`kf-dist-badge tier-${distTier}`}>
               <span className="kf-dist-icon" aria-hidden="true">
@@ -63,14 +72,28 @@ function KFRow({ ev, isNew }) {
           )}
           {ev.headshot && <span className="kf-hs"><HSGlyph /> HS</span>}
         </div>
-        <div className="kf-line">
-          <span className="kf-killer">{ev.killer}</span>
-          <span className="kf-wpn">
-            <WeaponGlyph />
-            <span>{ev.weapon}</span>
-          </span>
-          <span className={`kf-victim ${ev.type === "pve" ? "is-npc" : ""}`}>{ev.victim}</span>
-        </div>
+        {ev.isSuicide ? (
+          <div className="kf-line kf-line-suicide">
+            <span className="kf-suicide-icon"><SuicideGlyph /></span>
+            <span className="kf-killer">{ev.victim}</span>
+            <span className="kf-suicide-text">se matou</span>
+            {ev.weapon && ev.weapon !== "—" && (
+              <span className="kf-wpn kf-wpn-muted">
+                <WeaponGlyph />
+                <span>{ev.weapon}</span>
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="kf-line">
+            <span className="kf-killer">{ev.killer}</span>
+            <span className="kf-wpn">
+              <WeaponGlyph />
+              <span>{ev.weapon}</span>
+            </span>
+            <span className={`kf-victim ${ev.type === "pve" ? "is-npc" : ""}`}>{ev.victim}</span>
+          </div>
+        )}
       </div>
     </li>
   );

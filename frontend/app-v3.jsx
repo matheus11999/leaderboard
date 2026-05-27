@@ -31,42 +31,50 @@ function CrownSvg() {
 }
 
 // ===================================================================
-// Hero Unificado — logo + controls + podium
+// Hero Unificado — logo + stats + controls + podium
 // ===================================================================
-function HeroUnified({ period, setPeriod, mode, setMode, players }) {
-  const [online, setOnline] = useState(null);
-
+function useClock() {
+  const [time, setTime] = useState(() => new Date());
   useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/api/stats/server", { cache: "no-store" });
-        if (res.ok) {
-          const d = await res.json();
-          setOnline(d.online ?? d.players_online ?? null);
-        }
-      } catch {}
-    }
-    load();
-    const t = setInterval(load, 30000);
+    const t = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+  return time;
+}
 
-  const top3 = players.slice(0, 3);
+function HeroUnified({ period, setPeriod, mode, setMode, players }) {
+  const stats  = window.GAME_DATA.SERVER_STATS || {};
+  const clock  = useClock();
+  const top3   = players.slice(0, 3);
+
+  const timeStr = clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  const dateStr = clock.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).toUpperCase().replace(".", "");
+
+  const online   = Number(stats.onlineNow)   || 0;
+  const maxPl    = Number(stats.maxPlayers)  || 80;
+  const kills24h = Number(stats.killsLast24h || 0);
+  const totalKills = Number(stats.totalKills || 0);
+
+  const periodLabel = (UI_PERIODS.find(p => p.id === period) || UI_PERIODS[0]).label;
 
   return (
     <section className="hero-unified" data-screen-label="Hero / Pódio Top 3">
-      <div className="hero-u-top">
+
+      {/* ── Top bar: brand + server stats ── */}
+      <div className="hu2-topbar">
         <div className="hdr-brand">
           <div className="hdr-logo" aria-hidden="true">
-            <svg viewBox="0 0 60 60" width="40" height="40" fill="none">
+            <svg viewBox="0 0 60 60" width="44" height="44" fill="none">
               <path d="M30 4 L52 16 L52 44 L30 56 L8 44 L8 16 Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="miter" />
-              <path d="M30 10 L46 19 L46 41 L30 50 L14 41 L14 19 Z" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.55" />
+              <path d="M30 10 L46 19 L46 41 L30 50 L14 41 L14 19 Z" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.45" />
               <path d="M22 24 Q22 18 30 18 Q38 18 38 24 L38 32 Q38 35 36 36 L36 38 L24 38 L24 36 Q22 35 22 32 Z" fill="currentColor" />
-              <circle cx="26" cy="28" r="2" fill="#0a0907" />
-              <circle cx="34" cy="28" r="2" fill="#0a0907" />
-              <path d="M28 38 L28 41 M30 38 L30 41 M32 38 L32 41" stroke="#0a0907" strokeWidth="1.2" />
-              <path d="M30 4 L30 8" stroke="currentColor" strokeWidth="1" />
-              <path d="M30 52 L30 56" stroke="currentColor" strokeWidth="1" />
+              <circle cx="26" cy="28" r="2.2" fill="#0a0907" />
+              <circle cx="34" cy="28" r="2.2" fill="#0a0907" />
+              <path d="M28 38 L28 42 M30 38 L30 42 M32 38 L32 42" stroke="#0a0907" strokeWidth="1.4" />
+              <line x1="30" y1="4" x2="30" y2="9" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="30" y1="51" x2="30" y2="56" stroke="currentColor" strokeWidth="1.5" />
+              <line x1="8" y1="30" x2="4" y2="30" stroke="currentColor" strokeWidth="1" opacity="0.5" />
+              <line x1="52" y1="30" x2="56" y2="30" stroke="currentColor" strokeWidth="1" opacity="0.5" />
             </svg>
           </div>
           <div className="hdr-name">
@@ -79,11 +87,43 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
           </div>
         </div>
 
-        <div className="hero-u-controls">
-          <div className="hero-u-online">
+        <div className="hu2-stats-strip">
+          <div className="hu2-stat hu2-stat-online">
             <span className="hdr-dot" />
-            <span className="hero-u-online-num">{online !== null ? online : "—"}</span>
+            <div className="hu2-stat-body">
+              <span className="hu2-stat-val">
+                {online}<span className="hu2-stat-frac">/{maxPl}</span>
+              </span>
+              <span className="hu2-stat-lbl">ONLINE</span>
+            </div>
           </div>
+
+          <div className="hu2-stat-sep" aria-hidden="true" />
+
+          <div className="hu2-stat">
+            <div className="hu2-stat-body">
+              <span className="hu2-stat-val hu2-clock">{timeStr}</span>
+              <span className="hu2-stat-lbl">{dateStr} · BRT</span>
+            </div>
+          </div>
+
+          <div className="hu2-stat-sep" aria-hidden="true" />
+
+          <div className="hu2-stat">
+            <div className="hu2-stat-body">
+              <span className="hu2-stat-val">
+                {totalKills > 0 ? totalKills.toLocaleString("pt-BR") : kills24h.toLocaleString("pt-BR")}
+              </span>
+              <span className="hu2-stat-lbl">{totalKills > 0 ? "KILLS TOTAIS" : "KILLS 24H"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Controls bar ── */}
+      <div className="hu2-controls">
+        <div className="hu2-period-group">
+          <span className="hu2-ctrl-label">PERÍODO</span>
           <div className="hero-u-period" role="tablist">
             {UI_PERIODS.map((p) => (
               <button key={p.id} role="tab" aria-selected={period === p.id}
@@ -94,20 +134,29 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="hu2-mode-group">
+          <span className="hu2-ctrl-label">MODO</span>
           <div className="hero-u-mode" role="tablist">
             <button role="tab" aria-selected={mode === "pvp"}
               className={`hero-u-mode-btn ${mode === "pvp" ? "is-active" : ""}`}
-              onClick={() => setMode("pvp")}>⚔ PvP</button>
+              onClick={() => setMode("pvp")}>
+              <span className="hu2-mode-icon">⚔</span> PVP
+            </button>
             <button role="tab" aria-selected={mode === "pve"}
               className={`hero-u-mode-btn ${mode === "pve" ? "is-active" : ""}`}
-              onClick={() => setMode("pve")}>☣ PvE</button>
+              onClick={() => setMode("pve")}>
+              <span className="hu2-mode-icon">☣</span> PVE
+            </button>
           </div>
         </div>
       </div>
 
+      {/* ── Podium divider ── */}
       <div className="hero-u-eyebrow">
         <span className="hero-u-eyebrow-line" />
-        <span>TOP 3 · {(UI_PERIODS.find(p => p.id === period) || UI_PERIODS[0]).label} · {mode.toUpperCase()}</span>
+        <span>TOP 3 · {periodLabel} · {mode.toUpperCase()}</span>
         <span className="hero-u-eyebrow-line" />
       </div>
 

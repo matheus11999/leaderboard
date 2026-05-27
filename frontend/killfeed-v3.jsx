@@ -71,11 +71,6 @@ function KFRow({ ev, isNew }) {
           </span>
           <span className={`kf-victim ${ev.type === "pve" ? "is-npc" : ""}`}>{ev.victim}</span>
         </div>
-        <div className="kf-foot">
-          <span className={`kf-tier tier-${distTier}`}>
-            {{ close: "CLOSE", mid: "MÉDIA", long: "LONGA", extreme: "EXTREMA" }[distTier]}
-          </span>
-        </div>
       </div>
     </li>
   );

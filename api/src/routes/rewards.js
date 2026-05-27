@@ -30,7 +30,7 @@ async function sendPendingRewards(req, res, source) {
 
   try {
     const r = await db.query(
-      `SELECT id, occurred_at, server_id, target_uid, target_name,
+      `SELECT id::int AS id, occurred_at, server_id, target_uid, target_name,
               hunter_uid, hunter_name, target_streak, bounty_value
          FROM bounty_events
         WHERE server_id = $1

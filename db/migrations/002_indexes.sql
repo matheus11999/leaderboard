@@ -27,5 +27,11 @@ CREATE INDEX IF NOT EXISTS idx_players_total_deaths    ON players (total_deaths 
 CREATE INDEX IF NOT EXISTS idx_players_longest_shot    ON players (longest_shot_m DESC);
 CREATE INDEX IF NOT EXISTS idx_players_longest_life    ON players (longest_life_s DESC);
 CREATE INDEX IF NOT EXISTS idx_players_playtime        ON players (total_playtime_s DESC);
+CREATE INDEX IF NOT EXISTS idx_players_current_kill_streak ON players (current_kill_streak DESC);
+CREATE INDEX IF NOT EXISTS idx_players_best_kill_streak    ON players (best_kill_streak DESC);
+CREATE INDEX IF NOT EXISTS idx_players_bounty_active       ON players (bounty_active, bounty_value DESC);
+CREATE INDEX IF NOT EXISTS idx_bounty_events_occurred_at   ON bounty_events (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bounty_events_hunter_uid    ON bounty_events (hunter_uid) WHERE hunter_uid IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_bounty_events_target_uid    ON bounty_events (target_uid) WHERE target_uid IS NOT NULL;
 
 COMMIT;

@@ -12,7 +12,19 @@ const DEATH_COLUMN = {
   suicide: 'deaths_suicide',
 };
 
-module.exports = async function (data) {
+function bountyValueForStreak(streak, settings) {
+  if (!settings?.enabled) return 0;
+
+  const minKills = Math.max(1, Number(settings.min_kills) || 5);
+  const baseValue = Math.max(0, Number(settings.base_value) || 0);
+  const increasePct = Math.max(0, Number(settings.increase_pct) || 0);
+  if (streak < minKills || baseValue <= 0) return 0;
+
+  const extraKills = Math.max(0, streak - minKills);
+  return Math.min(10_000_000, Math.round(baseValue * Math.pow(1 + increasePct / 100, extraKills)));
+}
+
+module.exports = async function (data, envelope = {}) {
   const victim = data?.victim;
   if (!victim?.uid) return;
 
@@ -20,11 +32,31 @@ module.exports = async function (data) {
   const weapon = data.weapon || {};
   const stats = data.victim_stats || {};
   const pos = victim.position || {};
+  const distanceM = Number(data.distance_m);
+  const safeDistanceM = Number.isFinite(distanceM) ? distanceM : null;
+  const safeDistanceInt = Number.isFinite(distanceM) ? Math.round(distanceM) : 0;
+  const aliveSeconds = Number(data.alive_seconds);
+  const safeAliveSeconds = Number.isFinite(aliveSeconds) ? Math.round(aliveSeconds) : null;
+  const hydration = Number(stats.hydration);
+  const energy = Number(stats.energy);
 
   const killerType = (killer.type || 'environment').toLowerCase();
   const deathCol = DEATH_COLUMN[killerType] || 'deaths_env';
+  const serverId = String(envelope.server_id || data.server_id || 'default');
 
   await db.tx(async (c) => {
+    const settingsR = await c.query(
+      `SELECT enabled, min_kills, base_value, increase_pct
+         FROM bounty_settings
+        WHERE id = true`
+    );
+    const bountySettings = settingsR.rows[0] || {
+      enabled: true,
+      min_kills: 5,
+      base_value: 5000,
+      increase_pct: 20,
+    };
+
     // Make sure victim row exists (defensive — should be from player_connected).
     await c.query(
       `INSERT INTO players (uid, name)
@@ -44,6 +76,14 @@ module.exports = async function (data) {
         [killerUid, killer.player.name || killer.name || 'Unknown']
       );
     }
+
+    const victimBefore = await c.query(
+      `SELECT current_kill_streak, bounty_active, bounty_value
+         FROM players
+        WHERE uid = $1`,
+      [victim.uid]
+    );
+    const victimState = victimBefore.rows[0] || {};
 
     // Insert kill row.
     await c.query(
@@ -72,37 +112,83 @@ module.exports = async function (data) {
         killer.prefab || null,
         weapon.name || null,
         weapon.prefab || null,
-        Number.isFinite(data.distance_m) ? data.distance_m : null,
+        safeDistanceM,
         !!data.is_pvp,
         !!data.is_suicide,
-        Number.isFinite(data.alive_seconds) ? data.alive_seconds : null,
-        Number.isFinite(stats.hydration) ? stats.hydration : null,
-        Number.isFinite(stats.energy) ? stats.energy : null,
+        safeAliveSeconds,
+        Number.isFinite(hydration) ? hydration : null,
+        Number.isFinite(energy) ? energy : null,
         typeof stats.bleeding === 'boolean' ? stats.bleeding : null,
       ]
     );
 
-    // Bump victim counters.
+    if (
+      victimState.bounty_active &&
+      killerUid &&
+      killerUid !== victim.uid &&
+      !data.is_suicide
+    ) {
+      await c.query(
+        `INSERT INTO bounty_events (
+           server_id, target_uid, target_name, hunter_uid, hunter_name,
+           target_streak, bounty_value, weapon_name, weapon_prefab, distance_m
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          serverId,
+          victim.uid,
+          victim.name || 'Unknown',
+          killerUid,
+          killer.player?.name || killer.name || 'Unknown',
+          Number(victimState.current_kill_streak) || 0,
+          Number(victimState.bounty_value) || 0,
+          weapon.name || null,
+          weapon.prefab || null,
+          safeDistanceM,
+        ]
+      );
+    }
+
+    // Bump victim counters and reset any active PvP streak/bounty.
     await c.query(
       `UPDATE players SET
          total_deaths   = total_deaths + 1,
          ${deathCol}    = ${deathCol} + 1,
          longest_life_s = GREATEST(longest_life_s, COALESCE($1, 0)),
+         current_kill_streak = 0,
+         bounty_active = false,
+         bounty_value = 0,
+         bounty_started_at = NULL,
          last_seen      = NOW()
        WHERE uid = $2`,
-      [data.alive_seconds || 0, victim.uid]
+      [safeAliveSeconds || 0, victim.uid]
     );
 
-    // Bump killer counters if a player killed (not suicide).
-    if (killerUid && !data.is_suicide) {
-      await c.query(
+    // Bump killer counters if a player killed another player (not suicide).
+    if (killerUid && !data.is_suicide && data.is_pvp) {
+      const streakR = await c.query(
         `UPDATE players SET
            total_kills    = total_kills + 1,
            longest_shot_m = GREATEST(longest_shot_m, COALESCE($1, 0)),
+           current_kill_streak = current_kill_streak + 1,
+           best_kill_streak = GREATEST(best_kill_streak, current_kill_streak + 1),
            last_seen      = NOW()
-         WHERE uid = $2`,
-        [Number.isFinite(data.distance_m) ? data.distance_m : 0, killerUid]
+         WHERE uid = $2
+         RETURNING current_kill_streak`,
+        [safeDistanceInt, killerUid]
       );
+
+      const newStreak = Number(streakR.rows[0]?.current_kill_streak) || 0;
+      const bountyValue = bountyValueForStreak(newStreak, bountySettings);
+      if (bountyValue > 0) {
+        await c.query(
+          `UPDATE players SET
+             bounty_active = true,
+             bounty_value = $1,
+             bounty_started_at = COALESCE(bounty_started_at, NOW())
+           WHERE uid = $2`,
+          [bountyValue, killerUid]
+        );
+      }
     }
   });
 };

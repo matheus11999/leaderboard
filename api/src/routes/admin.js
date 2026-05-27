@@ -51,6 +51,11 @@ function ilikePattern(s) {
   if (!s) return null;
   return '%' + String(s).replace(/[%_]/g, '\\$&') + '%';
 }
+function clampNumber(raw, def, min, max) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return def;
+  return Math.min(max, Math.max(min, n));
+}
 
 // -------------------------------------------------------------------
 // Overview — private dashboard stats
@@ -60,7 +65,7 @@ router.get('/overview', async (_req, res) => {
     const [
       players, sessions, openSessions, kills, killsPvp, killsLast24,
       shopRows, shopVolume, missions, missionsActive,
-      eventsRaw, eventsUnprocessed, eventsLast24,
+      eventsRaw, eventsUnprocessed, eventsLast24, bountiesActive, bountiesPending,
     ] = await Promise.all([
       db.query(`SELECT COUNT(*)::INT AS n FROM players`),
       db.query(`SELECT COUNT(*)::INT AS n FROM sessions`),
@@ -75,6 +80,8 @@ router.get('/overview', async (_req, res) => {
       db.query(`SELECT COUNT(*)::INT AS n FROM events_raw`),
       db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE processed = false`),
       db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE received_at > NOW() - INTERVAL '24 hours'`),
+      db.query(`SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`),
+      db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events WHERE claimed = false`),
     ]);
 
     res.json({
@@ -91,8 +98,79 @@ router.get('/overview', async (_req, res) => {
       events_raw_total: eventsRaw.rows[0].n,
       events_raw_unprocessed: eventsUnprocessed.rows[0].n,
       events_raw_last_24h: eventsLast24.rows[0].n,
+      bounties_active: bountiesActive.rows[0].n,
+      bounties_pending: bountiesPending.rows[0].n,
       uptime_s: Math.floor(process.uptime()),
     });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// -------------------------------------------------------------------
+// Bounty settings and reward queue
+// -------------------------------------------------------------------
+router.get('/bounty/settings', async (_req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT enabled, min_kills, base_value, increase_pct, updated_at
+         FROM bounty_settings
+        WHERE id = true`
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.patch('/bounty/settings', express.json(), async (req, res) => {
+  const body = req.body || {};
+  const enabled = typeof body.enabled === 'boolean' ? body.enabled : true;
+  const minKills = Math.round(clampNumber(body.min_kills, 5, 1, 100));
+  const baseValue = Math.round(clampNumber(body.base_value, 5000, 0, 10_000_000));
+  const increasePct = clampNumber(body.increase_pct, 20, 0, 1000);
+
+  try {
+    const r = await db.query(
+      `INSERT INTO bounty_settings (id, enabled, min_kills, base_value, increase_pct, updated_at)
+       VALUES (true, $1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         enabled = EXCLUDED.enabled,
+         min_kills = EXCLUDED.min_kills,
+         base_value = EXCLUDED.base_value,
+         increase_pct = EXCLUDED.increase_pct,
+         updated_at = NOW()
+       RETURNING enabled, min_kills, base_value, increase_pct, updated_at`,
+      [enabled, minKills, baseValue, increasePct]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'update failed', message: err.message });
+  }
+});
+
+router.get('/bounty/rewards', async (req, res) => {
+  const limit = clampLimit(req.query.limit);
+  const offset = clampOffset(req.query.offset);
+  const claimed = req.query.claimed;
+  const conds = [];
+  const params = [limit, offset];
+  if (claimed === 'true') conds.push('claimed = true');
+  else if (claimed === 'false') conds.push('claimed = false');
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+
+  try {
+    const rowsR = await db.query(
+      `SELECT id, occurred_at, server_id, target_name, hunter_name,
+              target_streak, bounty_value, claimed, claimed_at
+         FROM bounty_events
+         ${where}
+        ORDER BY occurred_at DESC
+        LIMIT $1 OFFSET $2`,
+      params
+    );
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events ${where}`);
+    res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
   }
@@ -121,7 +199,8 @@ router.get('/players', async (req, res) => {
     const rowsR = await db.query(
       `SELECT uid, name, first_seen, last_seen, total_kills, total_deaths,
               deaths_pvp, deaths_zombie, deaths_bandit, deaths_env, deaths_suicide,
-              longest_shot_m, longest_life_s, total_playtime_s, current_balance, is_banned
+              longest_shot_m, longest_life_s, current_kill_streak, best_kill_streak,
+              bounty_active, bounty_value, total_playtime_s, current_balance, is_banned
          FROM players
          ${where}
         ORDER BY last_seen DESC
@@ -160,7 +239,9 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
   if (reset_stats === true) {
     sets.push(`total_kills = 0, total_deaths = 0, deaths_pvp = 0, deaths_zombie = 0,
                deaths_bandit = 0, deaths_env = 0, deaths_suicide = 0,
-               longest_shot_m = 0, longest_life_s = 0`);
+               longest_shot_m = 0, longest_life_s = 0,
+               current_kill_streak = 0, best_kill_streak = 0,
+               bounty_active = false, bounty_value = 0, bounty_started_at = NULL`);
   }
   if (!sets.length) return res.status(400).json({ error: 'no fields to update' });
 

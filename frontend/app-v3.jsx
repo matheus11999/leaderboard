@@ -257,18 +257,28 @@ function LongestAliveCard({ data }) {
 }
 
 // ===================================================================
-// HuntCard (Caçada / Bounty) — returns null when no hunts
+// HuntCard (Caçada / Bounty) — reads GAME_DATA.BOUNTIES
 // ===================================================================
-function HuntCard({ hunts }) {
-  if (!hunts || hunts.length === 0) return null;
+function HuntCard({ bounties }) {
+  const { formatBRL } = window.GAME_DATA;
+  const active    = bounties?.active    || [];
+  const completed = bounties?.completed || [];
 
-  const sorted = [...hunts].sort((a, b) => {
-    if (a.status !== b.status) return a.status === "active" ? -1 : 1;
-    return b.streak - a.streak;
-  });
-  const main = sorted[0];
-  const showTable = hunts.length > 1;
-  const isActive = main.status === "active";
+  if (active.length === 0 && completed.length === 0) return null;
+
+  const main     = active[0] || null;
+  const lastKill = completed[0] || null;
+  const isActive = Boolean(main);
+
+  // unify display fields
+  const nick   = isActive ? (main.nick   || "—") : (lastKill?.target  || "—");
+  const streak = isActive ? (main.streak || 0)   : (lastKill?.streak  || 0);
+  const value  = isActive ? (main.value  || 0)   : (lastKill?.value   || 0);
+
+  const showTable = active.length > 1;
+  const hunts = showTable
+    ? active.map((a) => ({ id: a.uid || a.nick, hunter: a.nick, streak: a.streak, bounty: a.value, status: "active", ender: null, enderWeapon: null, enderDist: null }))
+    : [];
 
   return (
     <article className={`ls-card hu-card hu-${main.status}`}>
@@ -286,7 +296,7 @@ function HuntCard({ hunts }) {
         <>
           <div className="hu-hero">
             <div className="hu-streak-block">
-              <span className="hu-streak-big">{main.streak}</span>
+              <span className="hu-streak-big">{streak}</span>
               <div className="hu-streak-meta">
                 <span className="hu-streak-bar" />
                 <span className="hu-streak-lbl-big">KILLS SEM MORRER</span>
@@ -300,23 +310,23 @@ function HuntCard({ hunts }) {
                   {isActive ? "AO VIVO" : "FIM"}
                 </span>
               </div>
-              <h4 className="hu-hunter-nick">{main.hunter}</h4>
+              <h4 className="hu-hunter-nick">{nick}</h4>
             </div>
           </div>
           <div className="hu-bounty">
             <span className="hu-bounty-icon" aria-hidden="true">$</span>
             <div className="hu-bounty-text">
               <span className="hu-bounty-lbl">RECOMPENSA</span>
-              <span className="hu-bounty-val">{main.bounty.toLocaleString("pt-BR")}</span>
+              <span className="hu-bounty-val">{value.toLocaleString("pt-BR")}</span>
             </div>
           </div>
-          {!isActive && main.ender && (
+          {!isActive && lastKill && lastKill.hunter && (
             <div className="hu-ender">
               <div className="hu-ender-pre"><span className="hu-ender-line" />ABATIDO POR</div>
               <div className="hu-ender-body">
-                <span className="hu-ender-nick">{main.ender}</span>
-                <span className="hu-ender-wpn"><WeaponSvg />{main.enderWeapon}</span>
-                <span className="hu-ender-dist">{main.enderDist}m</span>
+                <span className="hu-ender-nick">{lastKill.hunter}</span>
+                {lastKill.weapon && <span className="hu-ender-wpn"><WeaponSvg />{lastKill.weapon}</span>}
+                {lastKill.dist > 0 && <span className="hu-ender-dist">{lastKill.dist}m</span>}
               </div>
             </div>
           )}
@@ -325,7 +335,7 @@ function HuntCard({ hunts }) {
 
       {showTable && (
         <div className="hu-list">
-          {sorted.map((h) => (
+          {hunts.map((h) => (
             <div key={h.id} className={`hu-row hu-row-${h.status}`}>
               <div className="hu-row-streak-col">
                 <span className="hu-row-streak-num">{h.streak}</span>
@@ -557,7 +567,7 @@ function App() {
   const players    = window.GAME_DATA.RANKINGS[period][mode];
   const highlights = window.GAME_DATA.HIGHLIGHTS[period][mode];
   const safezone   = window.GAME_DATA.SAFEZONE[period];
-  const hunts      = (window.GAME_DATA.HUNTS || {})[period] || [];
+  const bounties   = window.GAME_DATA.BOUNTIES || { active: [], completed: [] };
 
   return (
     <div className="app" data-mode={mode}>
@@ -572,7 +582,7 @@ function App() {
           <section className="highlights" data-screen-label="Destaques">
             <LongestShotCard data={highlights.longestShot} />
             <LongestAliveCard data={highlights.longestAlive} />
-            <HuntCard hunts={hunts} />
+            <HuntCard bounties={bounties} />
           </section>
 
           <SafezoneSection data={safezone} period={period} />

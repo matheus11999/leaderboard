@@ -12,6 +12,8 @@ const VALID_TYPES = new Set([
   'longest_life',
   'most_deaths',
   'total_playtime',
+  'current_kill_streak',
+  'best_kill_streak',
 ]);
 
 const VALID_PERIODS = new Set(['daily', 'weekly', 'monthly', 'all']);
@@ -29,6 +31,23 @@ function periodToInterval(period) {
     case 'monthly': return "INTERVAL '30 days'";
     default:        return null;
   }
+}
+
+async function padPlayerRows(rows, limit) {
+  if (rows.length >= limit) return rows;
+
+  const seen = new Set(rows.map((r) => r.uid).filter(Boolean));
+  const needed = limit - rows.length;
+  const r = await db.query(
+    `SELECT uid, name, 0::INT AS value
+       FROM players
+      WHERE NOT (uid = ANY($1::TEXT[]))
+      ORDER BY last_seen DESC
+      LIMIT $2`,
+    [[...seen], needed]
+  );
+
+  return rows.concat(r.rows);
 }
 
 router.get('/', async (req, res) => {
@@ -58,7 +77,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'pve_kills': {
@@ -71,7 +90,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'longest_shot': {
@@ -84,7 +103,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'longest_life': {
@@ -96,7 +115,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'most_deaths': {
@@ -109,7 +128,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'total_playtime': {
@@ -122,6 +141,30 @@ router.get('/', async (req, res) => {
           [limit]
         );
         rows = r.rows;
+        break;
+      }
+      case 'current_kill_streak': {
+        const r = await db.query(
+          `SELECT uid, name, current_kill_streak AS value, bounty_active, bounty_value
+             FROM players
+            WHERE current_kill_streak > 0
+            ORDER BY current_kill_streak DESC, bounty_value DESC
+            LIMIT $1`,
+          [limit]
+        );
+        rows = await padPlayerRows(r.rows, limit);
+        break;
+      }
+      case 'best_kill_streak': {
+        const r = await db.query(
+          `SELECT uid, name, best_kill_streak AS value
+             FROM players
+            WHERE best_kill_streak > 0
+            ORDER BY best_kill_streak DESC
+            LIMIT $1`,
+          [limit]
+        );
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
     }

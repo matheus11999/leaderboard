@@ -16,6 +16,7 @@ const state = {
     kills:    { offset: 0, limit: 50, total: 0 },
     sessions: { offset: 0, limit: 50, total: 0 },
     shop:     { offset: 0, limit: 50, total: 0 },
+    bounty:   { offset: 0, limit: 50, total: 0 },
     missions: { offset: 0, limit: 50, total: 0 },
     events:   { offset: 0, limit: 100, total: 0 },
   },
@@ -108,6 +109,7 @@ async function refreshTab(name) {
     case 'kills':    return loadKills();
     case 'sessions': return loadSessions();
     case 'shop':     return loadShop();
+    case 'bounty':   return loadBounty();
     case 'missions': return loadMissions();
     case 'events':   return loadEvents();
   }
@@ -127,6 +129,8 @@ async function loadOverview() {
       { label: 'KILLS PVP', value: d.kills_pvp },
       { label: 'KILLS ÚLTIMAS 24H', value: d.kills_last_24h },
       { label: 'EVENTOS DE LOJA', value: d.shop_events },
+      { label: 'BOUNTIES ATIVOS', value: d.bounties_active },
+      { label: 'RECOMPENSAS PEND.', value: d.bounties_pending },
       { label: 'VOLUME ECONÔMICO', value: formatBRL(d.shop_volume_total) },
       { label: 'MISSÕES TOTAIS', value: d.missions_total },
       { label: 'MISSÕES ATIVAS', value: d.missions_active },
@@ -163,6 +167,9 @@ async function loadPlayers() {
       { key: 'last_seen', label: 'ÚLTIMA VEZ', render: v => fmtDate(v) },
       { key: 'total_kills', label: 'K' },
       { key: 'total_deaths', label: 'D' },
+      { key: 'current_kill_streak', label: 'SEQ' },
+      { key: 'best_kill_streak', label: 'MELHOR SEQ' },
+      { key: 'bounty_active', label: 'BOUNTY', render: (_v, r) => r.bounty_active ? `<span class="pill is-warn">R$ ${Number(r.bounty_value || 0).toLocaleString('pt-BR')}</span>` : '<span class="pill">—</span>' },
       { key: 'longest_shot_m', label: 'TIRO MAX (m)', render: v => Math.round(Number(v) || 0) },
       { key: 'longest_life_s', label: 'VIDA MAX', render: v => fmtSeconds(v) },
       { key: 'total_playtime_s', label: 'JOGADO', render: v => fmtSeconds(v) },
@@ -257,6 +264,55 @@ async function loadShop() {
     ]);
     renderPager('shop-pager', 'shop');
   } catch (err) { alert('Erro shop: ' + err.message); }
+}
+
+// ---------- bounty ----------
+async function loadBounty() {
+  const pager = state.pagers.bounty;
+  try {
+    const settings = await api('GET', '/bounty/settings');
+    document.getElementById('bounty-enabled').checked = !!settings.enabled;
+    document.getElementById('bounty-min-kills').value = settings.min_kills ?? 5;
+    document.getElementById('bounty-base-value').value = settings.base_value ?? 5000;
+    document.getElementById('bounty-increase-pct').value = settings.increase_pct ?? 20;
+
+    const claimed = document.getElementById('bounty-claimed').value;
+    const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+    if (claimed) q.set('claimed', claimed);
+    const d = await api('GET', '/bounty/rewards?' + q);
+    pager.total = d.total;
+    renderTable('bounty-table', [
+      { key: 'occurred_at', label: 'QUANDO', render: v => fmtDate(v) },
+      { key: 'hunter_name', label: 'CACADOR' },
+      { key: 'target_name', label: 'ALVO' },
+      { key: 'target_streak', label: 'SEQ ALVO' },
+      { key: 'bounty_value', label: 'VALOR', render: v => formatBRL(v) },
+      { key: 'claimed', label: 'STATUS', render: v => v ? '<span class="pill is-ok">PAGO</span>' : '<span class="pill is-warn">PENDENTE</span>' },
+      { key: 'claimed_at', label: 'PAGO EM', render: v => v ? fmtDate(v) : '—' },
+    ], d.rows, []);
+    renderPager('bounty-pager', 'bounty');
+  } catch (err) {
+    alert('Erro bounty: ' + err.message);
+  }
+}
+
+async function saveBountySettings() {
+  const status = document.getElementById('bounty-status');
+  status.textContent = 'Salvando...';
+  try {
+    const body = {
+      enabled: document.getElementById('bounty-enabled').checked,
+      min_kills: Number(document.getElementById('bounty-min-kills').value),
+      base_value: Number(document.getElementById('bounty-base-value').value),
+      increase_pct: Number(document.getElementById('bounty-increase-pct').value),
+    };
+    await api('PATCH', '/bounty/settings', body);
+    status.textContent = 'Config salva.';
+    setTimeout(() => { if (status.textContent === 'Config salva.') status.textContent = ''; }, 2500);
+    loadBounty();
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  }
 }
 
 // ---------- missions ----------
@@ -463,9 +519,10 @@ function bindUI() {
   for (const id of ['players-search', 'kills-search', 'shop-search', 'missions-search']) {
     document.getElementById(id).addEventListener('change', () => switchTab(state.current));
   }
-  for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
+  for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'bounty-claimed', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
     document.getElementById(id).addEventListener('change', () => switchTab(state.current));
   }
+  document.getElementById('bounty-save').addEventListener('click', saveBountySettings);
   document.getElementById('events-purge').addEventListener('click', purgeOldEvents);
 }
 

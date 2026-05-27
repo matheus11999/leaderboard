@@ -1,5 +1,13 @@
 // ===================================================================
 // data.jsx — fetches live data from the BrasilZ Leaderboard API
+// (POST /v1/arma/events ingests events; GET /api/* serves aggregated data).
+//
+// window.GAME_DATA exposes the same shape the app expects:
+//   - RANKINGS[period][mode]    → array of player rows
+//   - HIGHLIGHTS[period][mode]  → { longestShot, longestAlive }
+//   - SAFEZONE[period]          → { seller, buyer }
+//   - BOUNTIES                  → { active: [], completed: [] }
+//   - helpers: formatAlive, formatBRL, seedKillFeed (initial empty), makeKillEvent (legacy noop)
 //
 // Kill feed: polls /api/killfeed every 10s with cache: 'no-store'
 //   → fires 'killfeed-updated' event
@@ -15,7 +23,8 @@ const REFRESH_MS = 30_000;
 const KILL_FEED_REFRESH_MS = 10_000;
 
 // -------------------------------------------------------------------
-// Formatting helpers
+// Formatting helpers (kept identical to the original mock data.jsx so
+// the app components don't need to change).
 // -------------------------------------------------------------------
 function formatAlive(min) {
   if (!Number.isFinite(min) || min <= 0) return "—";
@@ -33,7 +42,7 @@ function formatBRL(value) {
 }
 
 // -------------------------------------------------------------------
-// Empty placeholders
+// Empty placeholders so app components don't crash before the first fetch.
 // -------------------------------------------------------------------
 function emptyLongestShot() {
   return { nick: "—", region: "—", dist: 0, weapon: "—", location: "—" };
@@ -48,6 +57,20 @@ function emptySafezoneSide() {
 const RANKINGS = {};
 const HIGHLIGHTS = {};
 const SAFEZONE = {};
+const BOUNTIES = {
+  active: [],
+  completed: [],
+};
+const SERVER_STATS = {
+  onlineNow: 0,
+  maxPlayers: 80,
+  totalPlayersRegistered: 0,
+  totalKills: 0,
+  totalPvpKills: 0,
+  activeMissions: 0,
+  killsLast24h: 0,
+  activeBounties: 0,
+};
 for (const p of PERIODS) {
   RANKINGS[p] = { pvp: [], pve: [] };
   HIGHLIGHTS[p] = {
@@ -58,7 +81,7 @@ for (const p of PERIODS) {
 }
 
 // -------------------------------------------------------------------
-// Backend mappers
+// Backend mappers — translate API rows into the shape the app expects.
 // -------------------------------------------------------------------
 function mapRankingRows(rows, deathsByUid, lifeByUid) {
   return rows.map((r, i) => {
@@ -88,9 +111,24 @@ function mapLongestShot(row) {
     nick: row.name || "—",
     region: "—",
     dist: Math.round(Number(row.value) || 0),
-    weapon: row.weapon_name || "—",
+    weapon: cleanWeaponName(row.weapon_name),
     location: "—",
   };
+}
+
+function cleanWeaponName(value) {
+  const name = String(value || "").trim();
+  if (!name) return "—";
+
+  if (
+    name.startsWith("Character_") ||
+    name.includes("Prefabs/Characters/") ||
+    name.includes("Assets/Characters/")
+  ) {
+    return "—";
+  }
+
+  return name;
 }
 
 function mapLongestAlive(row) {
@@ -117,7 +155,7 @@ function mapSafezoneSide(row) {
 }
 
 // -------------------------------------------------------------------
-// Kill feed state
+// Kill feed cache
 // -------------------------------------------------------------------
 const KILL_FEED = [];
 
@@ -129,7 +167,7 @@ function mapKillFeedRow(row) {
     type: row.is_pvp ? "pvp" : "pve",
     killer: row.killer_name || "—",
     victim: row.victim_name || "—",
-    weapon: row.weapon_name || "—",
+    weapon: cleanWeaponName(row.weapon_name),
     dist: Math.round(Number(row.distance_m) || 0),
     location: "—",
     minutesAgo,
@@ -141,18 +179,22 @@ function seedKillFeed() {
   return KILL_FEED.slice();
 }
 
-function makeKillEvent() { return null; }
+// Legacy mock no-op kept for back-compat with any widget that still calls it.
+function makeKillEvent() {
+  return null;
+}
 function pick(arr) { return arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : undefined; }
 function randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
 
 // -------------------------------------------------------------------
-// Expose synchronously
+// Expose synchronously so the React tree can mount immediately.
 // -------------------------------------------------------------------
 window.GAME_DATA = {
   RANKINGS,
   HIGHLIGHTS,
   SAFEZONE,
-  HUNTS: { daily: [], weekly: [], monthly: [] },
+  BOUNTIES,
+  SERVER_STATS,
   formatAlive,
   formatBRL,
   makeKillEvent,
@@ -162,7 +204,7 @@ window.GAME_DATA = {
 };
 
 // -------------------------------------------------------------------
-// API fetch helpers
+// API fetchers
 // -------------------------------------------------------------------
 async function getJson(url, opts) {
   const res = await fetch(url, { credentials: "same-origin", ...opts });
@@ -171,7 +213,7 @@ async function getJson(url, opts) {
 }
 
 // -------------------------------------------------------------------
-// Kill feed — dedicated 10s refresh, no cache
+// Kill feed — dedicated 10s refresh, no cache, fires killfeed-updated
 // -------------------------------------------------------------------
 async function fetchKillFeedLive() {
   try {
@@ -217,15 +259,55 @@ async function fetchSafezone(period) {
   };
 }
 
+async function fetchBounties() {
+  const [active, completed] = await Promise.all([
+    getJson(`/api/bounties/active?limit=5`),
+    getJson(`/api/bounties/completed?limit=5`),
+  ]);
+
+  BOUNTIES.active = (active.rows || []).map((r) => ({
+    uid: r.uid || null,
+    nick: r.name || "—",
+    streak: Number(r.current_kill_streak) || 0,
+    bestStreak: Number(r.best_kill_streak) || 0,
+    value: Number(r.bounty_value) || 0,
+    since: r.bounty_started_at || null,
+  }));
+
+  BOUNTIES.completed = (completed.rows || []).map((r) => ({
+    id: String(r.id),
+    target: r.target_name || "—",
+    hunter: r.hunter_name || "—",
+    streak: Number(r.target_streak) || 0,
+    value: Number(r.bounty_value) || 0,
+    weapon: cleanWeaponName(r.weapon_name),
+    dist: Math.round(Number(r.distance_m) || 0),
+    occurredAt: r.occurred_at || null,
+  }));
+}
+
+async function fetchServerStats() {
+  const data = await getJson(`/api/stats/server`);
+  SERVER_STATS.onlineNow = Number(data.online_now) || 0;
+  SERVER_STATS.totalPlayersRegistered = Number(data.total_players_registered) || 0;
+  SERVER_STATS.totalKills = Number(data.total_kills) || 0;
+  SERVER_STATS.totalPvpKills = Number(data.total_pvp_kills) || 0;
+  SERVER_STATS.activeMissions = Number(data.active_missions) || 0;
+  SERVER_STATS.killsLast24h = Number(data.kills_last_24h) || 0;
+  SERVER_STATS.activeBounties = Number(data.active_bounties) || 0;
+}
+
 async function refreshAll() {
   try {
     await Promise.all([
       ...PERIODS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
       ...PERIODS.map((p) => fetchSafezone(p)),
+      fetchBounties(),
+      fetchServerStats(),
     ]);
     window.dispatchEvent(new CustomEvent("gamedata-updated"));
   } catch (err) {
-    console.warn("[data.jsx] leaderboard refresh failed:", err.message);
+    console.warn("[data.jsx] refresh failed:", err.message);
   }
 }
 

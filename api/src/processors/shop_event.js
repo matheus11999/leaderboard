@@ -2,6 +2,15 @@
 
 const db = require('../db');
 
+const SHOP_EVENT_EXCLUDED_PREFABS = new Set([
+  '{BEA6BE0F1ACA4BAE}Prefabs/Items/Gems/Amethyst/Amethyst.et',
+  '{7FFC2F5327D6A9DE}Prefabs/Items/Gems/Citrine/Citrine.et',
+  '{46E76A63895B9A19}Prefabs/Items/Gems/Emerald/emerald.et',
+  '{25E9C251333236F0}Prefabs/Items/Gems/Obsidian/Obsidian.et',
+  '{9E6C75D27C169835}Prefabs/Items/Gems/Ruby/Ruby.et',
+  '{6C6BD7C20FDCE35C}Prefabs/Items/Gems/Topaz/Topaz.et',
+]);
+
 /**
  * Handles shop_purchase, shop_purchase_failed, shop_sale.
  * All three share the same payload shape — see README_PortalWebhook.md.
@@ -12,6 +21,7 @@ module.exports = async function (data) {
 
   const item = data.item || {};
   const balance = data.balance || {};
+  const isExcludedShopEvent = SHOP_EVENT_EXCLUDED_PREFABS.has(item.prefab || '');
 
   await db.tx(async (c) => {
     // Defensive upsert.
@@ -22,23 +32,25 @@ module.exports = async function (data) {
       [player.uid, player.name || 'Unknown']
     );
 
-    await c.query(
-      `INSERT INTO shop_events (
-         player_uid, player_name, item_name, item_prefab,
-         quantity, is_purchase, success, price, balance_after
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        player.uid,
-        player.name || 'Unknown',
-        item.name || 'Unknown',
-        item.prefab || null,
-        Number.isFinite(data.quantity) ? data.quantity : 0,
-        !!data.is_purchase,
-        !!data.success,
-        Number.isFinite(data.price) ? data.price : 0,
-        Number.isFinite(balance.total) ? balance.total : null,
-      ]
-    );
+    if (!isExcludedShopEvent) {
+      await c.query(
+        `INSERT INTO shop_events (
+           player_uid, player_name, item_name, item_prefab,
+           quantity, is_purchase, success, price, balance_after
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [
+          player.uid,
+          player.name || 'Unknown',
+          item.name || 'Unknown',
+          item.prefab || null,
+          Number.isFinite(data.quantity) ? data.quantity : 0,
+          !!data.is_purchase,
+          !!data.success,
+          Number.isFinite(data.price) ? data.price : 0,
+          Number.isFinite(balance.total) ? balance.total : null,
+        ]
+      );
+    }
 
     // Keep balance snapshot fresh on success.
     if (data.success && Number.isFinite(balance.total)) {

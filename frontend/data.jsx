@@ -51,7 +51,7 @@ function emptyLongestAlive() {
   return { nick: "—", region: "—", aliveMin: 0, location: "—" };
 }
 function emptySafezoneSide() {
-  return { nick: "—", total: 0, transactions: 0, topItems: [] };
+  return { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] };
 }
 
 const RANKINGS = {};
@@ -77,7 +77,7 @@ for (const p of DATA_PERIOD_IDS) {
     pvp: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
     pve: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
   };
-  SAFEZONE[p] = { seller: emptySafezoneSide(), buyer: emptySafezoneSide() };
+  SAFEZONE[p] = { seller: emptySafezoneSide(), buyer: emptySafezoneSide(), sellers: [], buyers: [] };
 }
 
 // -------------------------------------------------------------------
@@ -144,6 +144,7 @@ function mapLongestAlive(row) {
 function mapSafezoneSide(row) {
   if (!row) return emptySafezoneSide();
   return {
+    uid: row.uid || null,
     nick: row.name || "—",
     total: Number(row.total) || 0,
     transactions: Number(row.transactions) || 0,
@@ -152,6 +153,16 @@ function mapSafezoneSide(row) {
       qty: Number(it.qty) || 0,
     })),
   };
+}
+
+function mapSafezoneRows(rows) {
+  return (rows || []).map((row, i) => ({
+    rank: i + 1,
+    uid: row.uid || null,
+    nick: row.name || "—",
+    value: Number(row.total) || 0,
+    transactions: Number(row.transactions) || 0,
+  }));
 }
 
 // -------------------------------------------------------------------
@@ -257,6 +268,8 @@ async function fetchSafezone(period) {
   SAFEZONE[period] = {
     seller: mapSafezoneSide(data.seller),
     buyer: mapSafezoneSide(data.buyer),
+    sellers: mapSafezoneRows(data.sellers),
+    buyers: mapSafezoneRows(data.buyers),
   };
 }
 

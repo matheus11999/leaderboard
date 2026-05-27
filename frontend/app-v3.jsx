@@ -510,15 +510,19 @@ function RankTable({ period, dataTick }) {
     }
     if (filter === "vendedor" || filter === "comprador") {
       const kind = filter === "vendedor" ? "seller" : "buyer";
+      const listKey = filter === "vendedor" ? "sellers" : "buyers";
       const sz   = SAFEZONE[period];
+      const list = sz[listKey] || [];
+      if (list.length) return list.slice(0, 10);
       const seed = sz[kind];
-      if (!seed || seed.nick === "—" || !seed.total) return [];
-      return Array.from({ length: 10 }).map((_, i) => ({
-        rank: i + 1,
-        nick: i === 0 ? seed.nick : `Jogador ${i + 2}`,
-        value: Math.round((seed.total || 0) * Math.max(0.2, 1 - i * 0.1)),
-        transactions: Math.max(1, Math.round((seed.transactions || 0) * Math.max(0.2, 1 - i * 0.09))),
-      }));
+      if (!seed || seed.nick === "—" || seed.nick === "-" || !seed.total) return [];
+      return [{
+        rank: 1,
+        uid: seed.uid || null,
+        nick: seed.nick,
+        value: seed.total || 0,
+        transactions: seed.transactions || 0,
+      }];
     }
     return RANKINGS[period].pvp.slice(0, 10);
   }, [filter, period, dataTick]);

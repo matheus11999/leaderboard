@@ -171,11 +171,13 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
 function PodiumPlace({ place, player }) {
   const labels = { 1: "01", 2: "02", 3: "03" };
   const titles = { 1: "CAMPEÃO", 2: "VICE", 3: "BRONZE" };
+  const alive = window.GAME_DATA.formatAlive(player.aliveMin || 0);
 
   return (
     <article className={`pc place-${place}`}>
       {place === 1 && <span className="pc-crown" aria-hidden="true"><CrownSvg /></span>}
       <span className="pc-glow" aria-hidden="true" />
+      <span className="pc-medal-ring" aria-hidden="true" />
       <div className="pc-rank">
         <span className="pc-rank-hash">#</span>
         <span className="pc-rank-num">{labels[place]}</span>
@@ -191,9 +193,10 @@ function PodiumPlace({ place, player }) {
           <span className="pc-kills-lbl"><span>TOTAL DE</span><span>KILLS</span></span>
         </div>
         <dl className="pc-stats">
-          <div><dt>MORTES</dt><dd>{player.deaths}</dd></div>
-          <div><dt>K/D</dt><dd className="accent">{player.kd}</dd></div>
+          <div><dt>STATUS</dt><dd className="accent">{place === 1 ? "LIDER" : "TOP " + place}</dd></div>
+          <div><dt>TEMPO VIVO</dt><dd>{alive}</dd></div>
         </dl>
+        <div className="pc-pedestal" aria-hidden="true"><span /></div>
       </div>
     </article>
   );
@@ -201,7 +204,7 @@ function PodiumPlace({ place, player }) {
 
 function Podium({ players }) {
   const [first, second, third] = players;
-  const empty = { nick: "—", kills: 0, deaths: 0, kd: 0 };
+  const empty = { nick: "—", kills: 0, aliveMin: 0 };
   return (
     <div className="pc-row">
       <PodiumPlace place={1} player={first  || empty} />

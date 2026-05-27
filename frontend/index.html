@@ -411,23 +411,24 @@ button { font-family: inherit; cursor: pointer; }
    ================================================================= */
 .pc-row {
   display: grid;
-  grid-template-columns: 1.18fr 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 1fr 1.22fr 1fr;
+  grid-template-areas: "second first third";
+  gap: 14px;
   max-width: 1100px;
   margin: 0 auto;
-  padding: 20px 28px 28px;
-  align-items: stretch;
+  padding: 26px 28px 34px;
+  align-items: end;
 }
 @media (max-width: 860px) {
-  .pc-row { grid-template-columns: 1fr; }
+  .pc-row { grid-template-columns: 1fr; grid-template-areas: "first" "second" "third"; align-items: stretch; }
 }
 
 .pc {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  padding: 18px 18px 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  padding: 20px 18px 16px;
   background:
     radial-gradient(circle at 20% 0%, rgba(255,255,255,0.08), transparent 34%),
     linear-gradient(180deg, var(--surface-3) 0%, var(--surface-2) 50%, var(--surface) 100%);
@@ -438,6 +439,9 @@ button { font-family: inherit; cursor: pointer; }
   transition: transform 0.2s;
 }
 .pc:hover { transform: translateY(-2px); }
+.pc.place-1 { grid-area: first; min-height: 245px; }
+.pc.place-2 { grid-area: second; min-height: 214px; }
+.pc.place-3 { grid-area: third; min-height: 214px; }
 .pc::after {
   content: "";
   position: absolute;
@@ -509,32 +513,42 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Rank number */
 .pc-rank {
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  margin: -2px auto 0;
+  border: 1px solid currentColor;
+  background:
+    radial-gradient(circle, rgba(255,255,255,0.10), transparent 60%),
+    rgba(0,0,0,0.22);
+  box-shadow: inset 0 0 18px rgba(0,0,0,0.22), 0 0 18px rgba(0,0,0,0.20);
   line-height: 0.85;
   position: relative;
   z-index: 1;
 }
+.pc.place-1 .pc-rank { width: 104px; height: 104px; }
 .pc-rank-hash {
+  position: absolute;
+  left: 12px;
+  top: 10px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 24px;
+  font-size: 18px;
   color: currentColor;
   opacity: 0.55;
-  margin-top: 8px;
 }
 .pc-rank-num {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 76px;
-  line-height: 0.82;
+  font-size: 52px;
+  line-height: 1;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   color: currentColor;
 }
 .pc.place-1 .pc-rank-num {
-  font-size: 92px;
+  font-size: 66px;
   background: linear-gradient(180deg, #f8e29c 0%, #d4af55 40%, #8a6a2f 80%, #b88a3a 100%);
   background-clip: text;
   -webkit-background-clip: text;
@@ -568,18 +582,20 @@ button { font-family: inherit; cursor: pointer; }
 .pc-body {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   min-width: 0;
   position: relative;
   z-index: 1;
 }
 .pc-nick {
-  margin: 4px 0 14px;
+  margin: 2px 0 14px;
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 24px;
   letter-spacing: 0.01em;
   color: var(--text);
   line-height: 1.05;
+  text-align: center;
   word-break: break-word;
   overflow-wrap: anywhere;
 }
@@ -591,9 +607,10 @@ button { font-family: inherit; cursor: pointer; }
 .pc-kills {
   display: flex;
   align-items: center;
+  width: 100%;
   justify-content: space-between;
   gap: 14px;
-  padding: 11px 14px;
+  padding: 12px 15px;
   margin-bottom: 10px;
   background:
     linear-gradient(90deg, rgba(0,0,0,0.46) 0%, rgba(255,255,255,0.025) 100%),
@@ -606,18 +623,18 @@ button { font-family: inherit; cursor: pointer; }
 .pc-kills-num {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 38px;
+  font-size: 42px;
   line-height: 1;
   color: var(--text);
   letter-spacing: 0.005em;
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
 }
-.pc.place-1 .pc-kills-num { font-size: 48px; text-shadow: 0 0 16px rgba(201,165,92,0.5); }
+.pc.place-1 .pc-kills-num { font-size: 56px; text-shadow: 0 0 16px rgba(201,165,92,0.5); }
 .pc-kills-lbl {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.24em;
   color: currentColor;
   text-align: right;
@@ -629,7 +646,7 @@ button { font-family: inherit; cursor: pointer; }
   margin-top: 12px;
   background:
     linear-gradient(90deg, transparent, currentColor 18%, currentColor 82%, transparent);
-  opacity: 0.26;
+  opacity: 0.32;
 }
 .pc-pedestal span {
   position: absolute;

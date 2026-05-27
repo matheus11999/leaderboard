@@ -27,7 +27,7 @@ const PROCESSORS = {
 const router = express.Router();
 
 router.post('/', async (req, res) => {
-  const key = req.header('x-brasilz-api-key');
+  const key = req.header('x-brasilz-api-key') || req.body?.api_key;
   if (!safeEqual(key, process.env.INGEST_API_KEY)) {
     return res.status(401).json({ error: 'invalid api key' });
   }

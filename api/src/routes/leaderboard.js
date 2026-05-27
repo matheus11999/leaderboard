@@ -31,6 +31,23 @@ function periodToInterval(period) {
   }
 }
 
+async function padPlayerRows(rows, limit) {
+  if (rows.length >= limit) return rows;
+
+  const seen = new Set(rows.map((r) => r.uid).filter(Boolean));
+  const needed = limit - rows.length;
+  const r = await db.query(
+    `SELECT uid, name, 0::INT AS value
+       FROM players
+      WHERE NOT (uid = ANY($1::TEXT[]))
+      ORDER BY last_seen DESC
+      LIMIT $2`,
+    [[...seen], needed]
+  );
+
+  return rows.concat(r.rows);
+}
+
 router.get('/', async (req, res) => {
   const type = String(req.query.type || 'pvp_kills');
   const period = String(req.query.period || 'all');
@@ -58,7 +75,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'pve_kills': {
@@ -71,7 +88,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'longest_shot': {
@@ -84,7 +101,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'longest_life': {
@@ -96,7 +113,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'most_deaths': {
@@ -109,7 +126,7 @@ router.get('/', async (req, res) => {
             LIMIT $1`,
           [limit]
         );
-        rows = r.rows;
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
       case 'total_playtime': {

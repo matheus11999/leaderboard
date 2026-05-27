@@ -104,9 +104,24 @@ function mapLongestShot(row) {
     nick: row.name || "—",
     region: "—",
     dist: Math.round(Number(row.value) || 0),
-    weapon: row.weapon_name || "—",
+    weapon: cleanWeaponName(row.weapon_name),
     location: "—",
   };
+}
+
+function cleanWeaponName(value) {
+  const name = String(value || "").trim();
+  if (!name) return "—";
+
+  if (
+    name.startsWith("Character_") ||
+    name.includes("Prefabs/Characters/") ||
+    name.includes("Assets/Characters/")
+  ) {
+    return "—";
+  }
+
+  return name;
 }
 
 function mapLongestAlive(row) {
@@ -145,7 +160,7 @@ function mapKillFeedRow(row) {
     type: row.is_pvp ? "pvp" : "pve",
     killer: row.killer_name || "—",
     victim: row.victim_name || "—",
-    weapon: row.weapon_name || "—",
+    weapon: cleanWeaponName(row.weapon_name),
     dist: Math.round(Number(row.distance_m) || 0),
     location: "—",
     minutesAgo,

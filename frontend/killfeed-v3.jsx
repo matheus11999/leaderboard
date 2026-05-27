@@ -1,10 +1,10 @@
 // ===================================================================
-// Kill Feed v3 — Colapsável (oculto por padrão)
-// Botão de expandir bem destacado com badge de novos eventos
+// Kill Feed — Colapsável, atualiza a cada 10s via backend (no-cache)
+// Design: post-apocalíptico v1 (kf-* classes)
 // ===================================================================
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect } = React;
 
-function timeAgoLabel(min) {
+function timeAgo(min) {
   if (min < 1) return "AGORA";
   if (min < 60) return `${min}M`;
   const h = Math.floor(min / 60);
@@ -14,7 +14,7 @@ function timeAgoLabel(min) {
 
 function WeaponGlyph() {
   return (
-    <svg width="12" height="9" viewBox="0 0 22 10" fill="none" aria-hidden="true">
+    <svg width="13" height="9" viewBox="0 0 22 10" fill="none" aria-hidden="true">
       <path d="M0 4h11l2-2h4l1 1h3v3h-2l-1 1h-3l-2-2H0z" fill="currentColor" />
       <rect x="7" y="6" width="2" height="2" fill="currentColor" />
     </svg>
@@ -35,32 +35,46 @@ function HSGlyph() {
 }
 
 function KFRow({ ev, isNew }) {
+  const distTier =
+    ev.dist >= 700 ? "extreme" :
+    ev.dist >= 400 ? "long"    :
+    ev.dist >= 150 ? "mid"     : "close";
+
   return (
-    <li className={`kf3-row ${ev.type} ${isNew ? "kf3-new" : ""}`}>
-      <div className="kf3-rail" aria-hidden="true">
-        <span className="kf3-rail-dot" />
-        <span className="kf3-rail-line" />
+    <li className={`kf-row ${ev.type} ${isNew ? "kf-new" : ""}`}>
+      <div className="kf-rail" aria-hidden="true">
+        <span className="kf-rail-dot" />
+        <span className="kf-rail-line" />
       </div>
-      <div className="kf3-body">
-        <div className="kf3-tags">
-          <span className="kf3-time">{timeAgoLabel(ev.minutesAgo)}</span>
-          <span className={`kf3-tag ${ev.type}`}>{ev.type === "pve" ? "PvE" : "PvP"}</span>
-          {ev.headshot && (
-            <span className="kf3-hs"><HSGlyph /> HS</span>
+      <div className="kf-body">
+        <div className="kf-tags">
+          <span className="kf-time">{timeAgo(ev.minutesAgo)}</span>
+          <span className={`kf-tag ${ev.type}`}>{ev.type === "pve" ? "PvE" : "PvP"}</span>
+          {ev.dist > 0 && (
+            <span className={`kf-dist-badge tier-${distTier}`}>
+              <span className="kf-dist-icon" aria-hidden="true">
+                <svg width="8" height="8" viewBox="0 0 9 9" fill="none">
+                  <circle cx="4.5" cy="4.5" r="3.5" stroke="currentColor" strokeWidth="1" />
+                  <circle cx="4.5" cy="4.5" r="1" fill="currentColor" />
+                </svg>
+              </span>
+              <span className="kf-dist-num">{ev.dist}<i>m</i></span>
+            </span>
           )}
+          {ev.headshot && <span className="kf-hs"><HSGlyph /> HS</span>}
         </div>
-        <div className="kf3-line">
-          <span className="kf3-killer">{ev.killer}</span>
-          <span className="kf3-wpn">
+        <div className="kf-line">
+          <span className="kf-killer">{ev.killer}</span>
+          <span className="kf-wpn">
             <WeaponGlyph />
             <span>{ev.weapon}</span>
           </span>
-          <span className={`kf3-victim ${ev.type === "pve" ? "is-npc" : ""}`}>{ev.victim}</span>
+          <span className={`kf-victim ${ev.type === "pve" ? "is-npc" : ""}`}>{ev.victim}</span>
         </div>
-        <div className="kf3-foot">
-          <span className="kf3-dist"><b>{ev.dist}</b><i>m</i></span>
-          <span className="kf3-sep" />
-          <span className="kf3-loc">{ev.location}</span>
+        <div className="kf-foot">
+          <span className={`kf-tier tier-${distTier}`}>
+            {{ close: "CLOSE", mid: "MÉDIA", long: "LONGA", extreme: "EXTREMA" }[distTier]}
+          </span>
         </div>
       </div>
     </li>
@@ -68,14 +82,14 @@ function KFRow({ ev, isNew }) {
 }
 
 function KillFeedV3() {
-  const [events, setEvents] = useState(() => window.GAME_DATA.seedKillFeed());
-  const [newId, setNewId] = useState(null);
-  const [counter, setCounter] = useState(20);
-  const [open, setOpen] = useState(false);          // colapsado por padrão
-  const [unread, setUnread] = useState(0);          // novos eventos enquanto fechado
+  const [events, setEvents] = React.useState(() => window.GAME_DATA.seedKillFeed());
+  const [newId, setNewId] = React.useState(null);
+  const [counter, setCounter] = React.useState(10);
+  const [open, setOpen] = React.useState(false);
+  const [unread, setUnread] = React.useState(0);
 
-  // Refresh from live API whenever data.jsx finishes a refresh.
-  useEffect(() => {
+  // React to kill feed refreshes from data.jsx (every 10s, no-cache)
+  React.useEffect(() => {
     const handler = () => {
       const fresh = window.GAME_DATA.seedKillFeed();
       setEvents((prev) => {
@@ -83,32 +97,33 @@ function KillFeedV3() {
         const freshTopId = fresh[0]?.id;
         if (freshTopId && freshTopId !== prevTopId) {
           setNewId(freshTopId);
-          setUnread((u) => u + Math.max(0, fresh.length - prev.length));
+          const newCount = fresh.filter((f) => !prev.some((p) => p.id === f.id)).length;
+          setUnread((u) => u + Math.max(1, newCount));
           setTimeout(() => setNewId(null), 1800);
         }
         return fresh;
       });
-      setCounter(20);
+      setCounter(10);
     };
-    window.addEventListener("gamedata-updated", handler);
-    return () => window.removeEventListener("gamedata-updated", handler);
+    window.addEventListener("killfeed-updated", handler);
+    return () => window.removeEventListener("killfeed-updated", handler);
   }, []);
 
-  // Local countdown so the "NEXT REFRESH IN Ns" UI keeps ticking between fetches.
-  useEffect(() => {
+  // Countdown display
+  React.useEffect(() => {
     const t = setInterval(() => {
-      setCounter((c) => (c <= 1 ? 20 : c - 1));
+      setCounter((c) => (c <= 1 ? 10 : c - 1));
     }, 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Ao abrir, zera o badge
-  useEffect(() => {
+  // Clear unread when opened
+  React.useEffect(() => {
     if (open) setUnread(0);
   }, [open]);
 
-  // Esc fecha
-  useEffect(() => {
+  // Esc closes
+  React.useEffect(() => {
     if (!open) return;
     const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", onKey);
@@ -117,92 +132,79 @@ function KillFeedV3() {
 
   return (
     <>
-      {/* TOGGLE — visível sempre, fixo na lateral direita */}
+      {/* Toggle — sempre visível, fixo na lateral direita */}
       <button
         type="button"
-        className={`kf3-toggle ${open ? "is-open" : ""} ${unread > 0 ? "has-unread" : ""}`}
+        className={`kf-toggle ${open ? "is-open" : ""} ${unread > 0 ? "has-unread" : ""}`}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-controls="kf3-panel"
         aria-label={open ? "Fechar kill feed" : "Abrir kill feed"}
       >
-        <span className="kf3-toggle-pulse" aria-hidden="true" />
-        <span className="kf3-toggle-inner">
-          <span className="kf3-toggle-live">
-            <span className="kf3-toggle-dot" />
+        <span className="kf-toggle-inner">
+          <span className="kf-toggle-live">
+            <span className="kf-toggle-dot" />
             <span>AO VIVO</span>
           </span>
-          <span className="kf3-toggle-title">
-            KILL <em>FEED</em>
-          </span>
-          <span className="kf3-toggle-meta">
-            <span className="kf3-toggle-count">{events.length}</span>
-            <span className="kf3-toggle-count-lbl">EVENTOS AO VIVO</span>
-          </span>
-          <span className="kf3-toggle-arrow" aria-hidden="true">
+          <span className="kf-toggle-title">KILL <em>FEED</em></span>
+          <span className="kf-toggle-arrow" aria-hidden="true">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M9 3 L4 7 L9 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square" strokeLinejoin="miter" />
+              <path d="M9 3 L4 7 L9 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="square" />
             </svg>
           </span>
         </span>
         {unread > 0 && !open && (
-          <span className="kf3-toggle-badge" aria-label={`${unread} novos eventos`}>
-            +{unread > 99 ? "99" : unread}
-          </span>
+          <span className="kf-toggle-badge">+{unread > 99 ? "99" : unread}</span>
         )}
       </button>
 
-      {/* Overlay clicável quando aberto (escurece o resto) */}
-      {open && <div className="kf3-overlay" onClick={() => setOpen(false)} aria-hidden="true" />}
+      {open && <div className="kf-overlay" onClick={() => setOpen(false)} aria-hidden="true" />}
 
-      {/* PAINEL */}
-      <aside
-        id="kf3-panel"
-        className={`kf3 ${open ? "is-open" : "is-closed"}`}
-        aria-label="Kill feed ao vivo"
-        aria-hidden={!open}
-      >
-        <header className="kf3-hdr">
-          <div className="kf3-hdr-top">
-            <span className="kf3-live">
-              <span className="kf3-live-dot" />
+      <aside className={`kf-panel ${open ? "is-open" : ""}`} aria-hidden={!open}>
+        <header className="kf-hdr">
+          <div className="kf-hdr-top">
+            <span className="kf-live">
+              <span className="kf-live-dot" />
               <span>AO VIVO</span>
             </span>
-            <div className="kf3-hdr-right">
-              <span className="kf3-counter">
-                <span className="kf3-counter-pre">PRÓX</span>
-                <span className="kf3-counter-num">{String(counter).padStart(2, "0")}</span>
-                <span className="kf3-counter-unit">s</span>
+            <div className="kf-hdr-right">
+              <span className="kf-counter">
+                <span className="kf-counter-pre">PRÓX</span>
+                <span className="kf-counter-num">{String(counter).padStart(2, "0")}</span>
+                <span className="kf-counter-unit">s</span>
               </span>
-              <button className="kf3-close" onClick={() => setOpen(false)} aria-label="Fechar">
+              <button className="kf-close" onClick={() => setOpen(false)} aria-label="Fechar">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" />
                 </svg>
               </button>
             </div>
           </div>
-          <h2 className="kf3-title">
-            KILL FEED <span className="kf3-title-acc">//</span>
-          </h2>
-          <div className="kf3-sub">
-            <span>FEED EM TEMPO REAL</span>
-            <span className="kf3-sub-sep" />
+          <h2 className="kf-title">KILL FEED <span className="kf-title-acc">//</span></h2>
+          <div className="kf-sub">
+            <span>FEED EM TEMPO REAL · 10s</span>
+            <span className="kf-sub-sep" />
             <span>{events.length} EVENTOS</span>
           </div>
         </header>
 
-        <ul className="kf3-list">
-          {events.map((ev) => (
-            <KFRow key={ev.id} ev={ev} isNew={ev.id === newId} />
-          ))}
+        <ul className="kf-list">
+          {events.length === 0 ? (
+            <li style={{ padding: "24px 18px", color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.14em" }}>
+              SEM EVENTOS RECENTES...
+            </li>
+          ) : (
+            events.map((ev) => (
+              <KFRow key={ev.id} ev={ev} isNew={ev.id === newId} />
+            ))
+          )}
         </ul>
 
-        <footer className="kf3-foot-bar">
-          <span className="kf3-foot-l">
-            <span className="kf3-foot-dot" />
-            BR-01 / CHANNEL.LIVE
+        <footer className="kf-foot-bar">
+          <span className="kf-foot-l">
+            <span className="kf-foot-dot" />
+            BR-01 · AO VIVO
           </span>
-          <span className="kf3-foot-r">v1.2.3</span>
+          <span>ATUALIZA A CADA 10S</span>
         </footer>
       </aside>
     </>

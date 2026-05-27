@@ -1,26 +1,21 @@
 // ===================================================================
 // data.jsx — fetches live data from the BrasilZ Leaderboard API
-// (POST /v1/arma/events ingests events; GET /api/* serves aggregated data).
 //
-// window.GAME_DATA exposes the same shape the app expects:
-//   - RANKINGS[period][mode]    → array of player rows
-//   - HIGHLIGHTS[period][mode]  → { longestShot, longestAlive }
-//   - SAFEZONE[period]          → { seller, buyer }
-//   - helpers: formatAlive, formatBRL, seedKillFeed (initial empty), makeKillEvent (legacy noop)
+// Kill feed: polls /api/killfeed every 10s with cache: 'no-store'
+//   → fires 'killfeed-updated' event
 //
-// On load, structures start empty so the React tree mounts without errors.
-// After each fetch the structures are populated in place and a
-// 'gamedata-updated' window event fires so the app can re-render.
+// Leaderboard: polls every 30s
+//   → fires 'gamedata-updated' event
 // ===================================================================
 
 const PERIODS = ["daily", "weekly", "monthly"];
 const MODES = ["pvp", "pve"];
 const TOP_LIMIT = 20;
 const REFRESH_MS = 30_000;
+const KILL_FEED_REFRESH_MS = 10_000;
 
 // -------------------------------------------------------------------
-// Formatting helpers (kept identical to the original mock data.jsx so
-// the app components don't need to change).
+// Formatting helpers
 // -------------------------------------------------------------------
 function formatAlive(min) {
   if (!Number.isFinite(min) || min <= 0) return "—";
@@ -38,7 +33,7 @@ function formatBRL(value) {
 }
 
 // -------------------------------------------------------------------
-// Empty placeholders so app components don't crash before the first fetch.
+// Empty placeholders
 // -------------------------------------------------------------------
 function emptyLongestShot() {
   return { nick: "—", region: "—", dist: 0, weapon: "—", location: "—" };
@@ -63,9 +58,7 @@ for (const p of PERIODS) {
 }
 
 // -------------------------------------------------------------------
-// Backend mappers — translate API rows into the shape the app expects.
-// Missing fields (region, headshotPct, favWeapon, location) default to "—" /0
-// until the mod is extended to send them.
+// Backend mappers
 // -------------------------------------------------------------------
 function mapRankingRows(rows, deathsByUid, lifeByUid) {
   return rows.map((r, i) => {
@@ -124,7 +117,7 @@ function mapSafezoneSide(row) {
 }
 
 // -------------------------------------------------------------------
-// Kill feed cache
+// Kill feed state
 // -------------------------------------------------------------------
 const KILL_FEED = [];
 
@@ -148,15 +141,12 @@ function seedKillFeed() {
   return KILL_FEED.slice();
 }
 
-// Legacy mock no-op kept for back-compat with any widget that still calls it.
-function makeKillEvent() {
-  return null;
-}
+function makeKillEvent() { return null; }
 function pick(arr) { return arr && arr.length ? arr[Math.floor(Math.random() * arr.length)] : undefined; }
 function randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
 
 // -------------------------------------------------------------------
-// Expose synchronously so the React tree can mount immediately.
+// Expose synchronously
 // -------------------------------------------------------------------
 window.GAME_DATA = {
   RANKINGS,
@@ -171,14 +161,31 @@ window.GAME_DATA = {
 };
 
 // -------------------------------------------------------------------
-// API fetchers
+// API fetch helpers
 // -------------------------------------------------------------------
-async function getJson(url) {
-  const res = await fetch(url, { credentials: "same-origin" });
+async function getJson(url, opts) {
+  const res = await fetch(url, { credentials: "same-origin", ...opts });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   return res.json();
 }
 
+// -------------------------------------------------------------------
+// Kill feed — dedicated 10s refresh, no cache
+// -------------------------------------------------------------------
+async function fetchKillFeedLive() {
+  try {
+    const data = await getJson("/api/killfeed?limit=50", { cache: "no-store" });
+    KILL_FEED.length = 0;
+    for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
+    window.dispatchEvent(new CustomEvent("killfeed-updated"));
+  } catch (err) {
+    console.warn("[data.jsx] killfeed refresh failed:", err.message);
+  }
+}
+
+// -------------------------------------------------------------------
+// Leaderboard + safezone — 30s refresh
+// -------------------------------------------------------------------
 async function fetchPeriodMode(period, mode) {
   const type = mode === "pvp" ? "pvp_kills" : "pve_kills";
   const [kills, deathsAgg, lifeAgg, longestShot, longestAlive] = await Promise.all([
@@ -209,25 +216,21 @@ async function fetchSafezone(period) {
   };
 }
 
-async function fetchKillFeed() {
-  const data = await getJson(`/api/killfeed?limit=50`);
-  KILL_FEED.length = 0;
-  for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
-}
-
 async function refreshAll() {
   try {
     await Promise.all([
       ...PERIODS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
       ...PERIODS.map((p) => fetchSafezone(p)),
-      fetchKillFeed(),
     ]);
     window.dispatchEvent(new CustomEvent("gamedata-updated"));
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.warn("[data.jsx] refresh failed:", err.message);
+    console.warn("[data.jsx] leaderboard refresh failed:", err.message);
   }
 }
+
+// Boot
+fetchKillFeedLive();
+setInterval(fetchKillFeedLive, KILL_FEED_REFRESH_MS);
 
 refreshAll();
 setInterval(refreshAll, REFRESH_MS);

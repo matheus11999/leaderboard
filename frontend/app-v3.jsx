@@ -90,6 +90,9 @@ function ServerHeader() {
   }, []);
   const time = now.toLocaleTimeString("pt-BR", { hour12: false });
   const date = now.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase().replace(".", "");
+  const serverStats = window.GAME_DATA.SERVER_STATS || {};
+  const onlineNow = Number(serverStats.onlineNow) || 0;
+  const maxPlayers = Number(serverStats.maxPlayers) || 80;
 
   return (
     <header className="hd3">
@@ -126,7 +129,7 @@ function ServerHeader() {
         <div className="hd3-stat">
           <div className="hd3-stat-row">
             <span className="hd3-stat-dot hd3-dot-on" />
-            <span className="hd3-stat-num">62<span className="hd3-stat-frac">/80</span></span>
+            <span className="hd3-stat-num">{onlineNow}<span className="hd3-stat-frac">/{maxPlayers}</span></span>
           </div>
           <div className="hd3-stat-label">JOGADORES ONLINE</div>
         </div>

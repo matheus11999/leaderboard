@@ -53,6 +53,15 @@ function emptySafezoneSide() {
 const RANKINGS = {};
 const HIGHLIGHTS = {};
 const SAFEZONE = {};
+const SERVER_STATS = {
+  onlineNow: 0,
+  maxPlayers: 80,
+  totalPlayersRegistered: 0,
+  totalKills: 0,
+  totalPvpKills: 0,
+  activeMissions: 0,
+  killsLast24h: 0,
+};
 for (const p of PERIODS) {
   RANKINGS[p] = { pvp: [], pve: [] };
   HIGHLIGHTS[p] = {
@@ -162,6 +171,7 @@ window.GAME_DATA = {
   RANKINGS,
   HIGHLIGHTS,
   SAFEZONE,
+  SERVER_STATS,
   formatAlive,
   formatBRL,
   makeKillEvent,
@@ -215,12 +225,23 @@ async function fetchKillFeed() {
   for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
 }
 
+async function fetchServerStats() {
+  const data = await getJson(`/api/stats/server`);
+  SERVER_STATS.onlineNow = Number(data.online_now) || 0;
+  SERVER_STATS.totalPlayersRegistered = Number(data.total_players_registered) || 0;
+  SERVER_STATS.totalKills = Number(data.total_kills) || 0;
+  SERVER_STATS.totalPvpKills = Number(data.total_pvp_kills) || 0;
+  SERVER_STATS.activeMissions = Number(data.active_missions) || 0;
+  SERVER_STATS.killsLast24h = Number(data.kills_last_24h) || 0;
+}
+
 async function refreshAll() {
   try {
     await Promise.all([
       ...PERIODS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
       ...PERIODS.map((p) => fetchSafezone(p)),
       fetchKillFeed(),
+      fetchServerStats(),
     ]);
     window.dispatchEvent(new CustomEvent("gamedata-updated"));
   } catch (err) {

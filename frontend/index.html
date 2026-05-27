@@ -1439,13 +1439,13 @@ button { font-family: inherit; cursor: pointer; }
 .kf-counter-pre { font-family: var(--font-display); font-weight: 500; font-size: 9px; letter-spacing: 0.22em; color: var(--text-dim); margin-right: 4px; }
 .kf-counter-num { font-family: var(--font-mono); font-size: 14px; color: var(--text); }
 .kf-counter-unit { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); }
-.kf-close {
+.kf-close, .kf-search-toggle {
   background: transparent; border: 1px solid var(--border-strong); color: var(--text-muted);
   width: 26px; height: 26px;
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: all 0.15s;
 }
-.kf-close:hover { color: var(--text); border-color: var(--primary); background: rgba(193,39,45,0.12); }
+.kf-close:hover, .kf-search-toggle:hover, .kf-search-toggle.is-active { color: var(--text); border-color: var(--primary); background: rgba(193,39,45,0.12); }
 
 .kf-title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 28px; letter-spacing: 0.02em; color: var(--text); line-height: 0.95; }
 .kf-title-acc { color: var(--primary); font-size: 20px; opacity: 0.7; margin-left: 6px; }
@@ -1484,6 +1484,39 @@ button { font-family: inherit; cursor: pointer; }
   border-color: rgba(132,204,22,0.58);
   box-shadow: inset 3px 0 0 #84cc16, 0 0 14px rgba(132,204,22,0.14);
 }
+.kf-search {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 7px 8px;
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+}
+.kf-search input {
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.kf-search input::placeholder { color: var(--text-dim); }
+.kf-search button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+}
+.kf-search button:hover { color: var(--text); border-color: var(--border-strong); }
 
 .kf-list { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 8px 10px; }
 .kf-list::-webkit-scrollbar { width: 4px; }

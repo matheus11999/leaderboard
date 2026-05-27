@@ -106,7 +106,14 @@ function KillFeedV3() {
   const [open, setOpen] = React.useState(false);
   const [unread, setUnread] = React.useState(0);
   const [feedFilter, setFeedFilter] = React.useState("pvp");
-  const filteredEvents = events.filter((ev) => ev.type === feedFilter);
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const searchNeedle = searchTerm.trim().toLowerCase();
+  const filteredEvents = events.filter((ev) => {
+    if (ev.type !== feedFilter) return false;
+    if (!searchNeedle) return true;
+    return [ev.killer, ev.victim].some((name) => String(name || "").toLowerCase().includes(searchNeedle));
+  });
 
   // React to kill feed refreshes from data.jsx (every 10s, no-cache)
   React.useEffect(() => {
@@ -147,7 +154,7 @@ function KillFeedV3() {
   React.useEffect(() => {
     setNewId(null);
     if (open) setUnread(0);
-  }, [feedFilter, open]);
+  }, [feedFilter, searchNeedle, open]);
 
   // Esc closes
   React.useEffect(() => {
@@ -155,6 +162,13 @@ function KillFeedV3() {
     const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) {
+      setSearchOpen(false);
+      setSearchTerm("");
+    }
   }, [open]);
 
   return (
@@ -199,6 +213,17 @@ function KillFeedV3() {
                 <span className="kf-counter-num">{String(counter).padStart(2, "0")}</span>
                 <span className="kf-counter-unit">s</span>
               </span>
+              <button
+                className={`kf-search-toggle ${searchOpen ? "is-active" : ""}`}
+                onClick={() => setSearchOpen((v) => !v)}
+                aria-label="Buscar jogador"
+                type="button"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <circle cx="6" cy="6" r="3.8" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                </svg>
+              </button>
               <button className="kf-close" onClick={() => setOpen(false)} aria-label="Fechar">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                   <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="square" />
@@ -228,6 +253,27 @@ function KillFeedV3() {
               PvE
             </button>
           </div>
+          {searchOpen && (
+            <div className="kf-search">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <circle cx="6" cy="6" r="3.8" stroke="currentColor" strokeWidth="1.4" />
+                <path d="M9 9l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="square" />
+              </svg>
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="BUSCAR JOGADOR..."
+                autoFocus
+              />
+              {searchTerm && (
+                <button type="button" onClick={() => setSearchTerm("")} aria-label="Limpar busca">
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                    <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="square" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </header>
 
         <ul className="kf-list">

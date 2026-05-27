@@ -105,17 +105,21 @@ function KillFeedV3() {
   const [counter, setCounter] = React.useState(10);
   const [open, setOpen] = React.useState(false);
   const [unread, setUnread] = React.useState(0);
+  const [feedFilter, setFeedFilter] = React.useState("pvp");
+  const filteredEvents = events.filter((ev) => ev.type === feedFilter);
 
   // React to kill feed refreshes from data.jsx (every 10s, no-cache)
   React.useEffect(() => {
     const handler = () => {
       const fresh = window.GAME_DATA.seedKillFeed();
       setEvents((prev) => {
-        const prevTopId = prev[0]?.id;
-        const freshTopId = fresh[0]?.id;
+        const prevFiltered = prev.filter((ev) => ev.type === feedFilter);
+        const freshFiltered = fresh.filter((ev) => ev.type === feedFilter);
+        const prevTopId = prevFiltered[0]?.id;
+        const freshTopId = freshFiltered[0]?.id;
         if (freshTopId && freshTopId !== prevTopId) {
           setNewId(freshTopId);
-          const newCount = fresh.filter((f) => !prev.some((p) => p.id === f.id)).length;
+          const newCount = freshFiltered.filter((f) => !prevFiltered.some((p) => p.id === f.id)).length;
           setUnread((u) => u + Math.max(1, newCount));
           setTimeout(() => setNewId(null), 1800);
         }
@@ -125,7 +129,7 @@ function KillFeedV3() {
     };
     window.addEventListener("killfeed-updated", handler);
     return () => window.removeEventListener("killfeed-updated", handler);
-  }, []);
+  }, [feedFilter]);
 
   // Countdown display
   React.useEffect(() => {
@@ -139,6 +143,11 @@ function KillFeedV3() {
   React.useEffect(() => {
     if (open) setUnread(0);
   }, [open]);
+
+  React.useEffect(() => {
+    setNewId(null);
+    if (open) setUnread(0);
+  }, [feedFilter, open]);
 
   // Esc closes
   React.useEffect(() => {
@@ -201,17 +210,33 @@ function KillFeedV3() {
           <div className="kf-sub">
             <span>FEED EM TEMPO REAL · 10s</span>
             <span className="kf-sub-sep" />
-            <span>{events.length} EVENTOS</span>
+            <span>{filteredEvents.length} EVENTOS</span>
+          </div>
+          <div className="kf-filter" role="group" aria-label="Filtro do kill feed">
+            <button
+              type="button"
+              className={`kf-filter-btn ${feedFilter === "pvp" ? "is-active" : ""}`}
+              onClick={() => setFeedFilter("pvp")}
+            >
+              PvP
+            </button>
+            <button
+              type="button"
+              className={`kf-filter-btn ${feedFilter === "pve" ? "is-active" : ""}`}
+              onClick={() => setFeedFilter("pve")}
+            >
+              PvE
+            </button>
           </div>
         </header>
 
         <ul className="kf-list">
-          {events.length === 0 ? (
+          {filteredEvents.length === 0 ? (
             <li style={{ padding: "24px 18px", color: "var(--text-dim)", fontFamily: "var(--font-mono)", fontSize: "11px", letterSpacing: "0.14em" }}>
               SEM EVENTOS RECENTES...
             </li>
           ) : (
-            events.map((ev) => (
+            filteredEvents.map((ev) => (
               <KFRow key={ev.id} ev={ev} isNew={ev.id === newId} />
             ))
           )}

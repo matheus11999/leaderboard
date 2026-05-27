@@ -121,7 +121,8 @@ router.get('/players', async (req, res) => {
     const rowsR = await db.query(
       `SELECT uid, name, first_seen, last_seen, total_kills, total_deaths,
               deaths_pvp, deaths_zombie, deaths_bandit, deaths_env, deaths_suicide,
-              longest_shot_m, longest_life_s, total_playtime_s, current_balance, is_banned
+              longest_shot_m, longest_life_s, current_kill_streak, best_kill_streak,
+              bounty_active, bounty_value, total_playtime_s, current_balance, is_banned
          FROM players
          ${where}
         ORDER BY last_seen DESC
@@ -160,7 +161,9 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
   if (reset_stats === true) {
     sets.push(`total_kills = 0, total_deaths = 0, deaths_pvp = 0, deaths_zombie = 0,
                deaths_bandit = 0, deaths_env = 0, deaths_suicide = 0,
-               longest_shot_m = 0, longest_life_s = 0`);
+               longest_shot_m = 0, longest_life_s = 0,
+               current_kill_streak = 0, best_kill_streak = 0,
+               bounty_active = false, bounty_value = 0, bounty_started_at = NULL`);
   }
   if (!sets.length) return res.status(400).json({ error: 'no fields to update' });
 

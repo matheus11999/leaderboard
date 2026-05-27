@@ -12,6 +12,8 @@ const VALID_TYPES = new Set([
   'longest_life',
   'most_deaths',
   'total_playtime',
+  'current_kill_streak',
+  'best_kill_streak',
 ]);
 
 const VALID_PERIODS = new Set(['daily', 'weekly', 'monthly', 'all']);
@@ -139,6 +141,30 @@ router.get('/', async (req, res) => {
           [limit]
         );
         rows = r.rows;
+        break;
+      }
+      case 'current_kill_streak': {
+        const r = await db.query(
+          `SELECT uid, name, current_kill_streak AS value, bounty_active, bounty_value
+             FROM players
+            WHERE current_kill_streak > 0
+            ORDER BY current_kill_streak DESC, bounty_value DESC
+            LIMIT $1`,
+          [limit]
+        );
+        rows = await padPlayerRows(r.rows, limit);
+        break;
+      }
+      case 'best_kill_streak': {
+        const r = await db.query(
+          `SELECT uid, name, best_kill_streak AS value
+             FROM players
+            WHERE best_kill_streak > 0
+            ORDER BY best_kill_streak DESC
+            LIMIT $1`,
+          [limit]
+        );
+        rows = await padPlayerRows(r.rows, limit);
         break;
       }
     }

@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS players (
   deaths_suicide   INT  NOT NULL DEFAULT 0,
   longest_shot_m   REAL NOT NULL DEFAULT 0,
   longest_life_s   INT  NOT NULL DEFAULT 0,
+  current_kill_streak INT NOT NULL DEFAULT 0,
+  best_kill_streak INT NOT NULL DEFAULT 0,
+  bounty_active    BOOL NOT NULL DEFAULT false,
+  bounty_value     INT  NOT NULL DEFAULT 0,
+  bounty_started_at TIMESTAMPTZ,
   total_playtime_s INT  NOT NULL DEFAULT 0,
   current_balance  INT  NOT NULL DEFAULT 0,
   is_banned        BOOL NOT NULL DEFAULT false
@@ -55,6 +60,21 @@ CREATE TABLE IF NOT EXISTS kills (
   victim_hydration  REAL,
   victim_energy     REAL,
   victim_bleeding   BOOL
+);
+
+CREATE TABLE IF NOT EXISTS bounty_events (
+  id             BIGSERIAL PRIMARY KEY,
+  occurred_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  target_uid     TEXT REFERENCES players(uid) ON DELETE SET NULL,
+  target_name    TEXT NOT NULL,
+  hunter_uid     TEXT REFERENCES players(uid) ON DELETE SET NULL,
+  hunter_name    TEXT NOT NULL,
+  target_streak  INT NOT NULL DEFAULT 0,
+  bounty_value   INT NOT NULL DEFAULT 0,
+  weapon_name    TEXT,
+  weapon_prefab  TEXT,
+  distance_m     REAL,
+  claimed        BOOL NOT NULL DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS shop_events (

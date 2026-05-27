@@ -7,10 +7,12 @@ const cors = require('cors');
 const db = require('./db');
 const logger = require('./lib/logger');
 const { seedAdminFromEnv } = require('./auth');
+const { ensureSchema } = require('./schema');
 
 const ingestRouter      = require('./routes/ingest');
 const leaderboardRouter = require('./routes/leaderboard');
 const killfeedRouter    = require('./routes/killfeed');
+const bountiesRouter    = require('./routes/bounties');
 const playersRouter     = require('./routes/players');
 const statsRouter       = require('./routes/stats');
 const safezoneRouter    = require('./routes/safezone');
@@ -30,6 +32,7 @@ async function bootstrap() {
   }
 
   await db.waitForReady();
+  await ensureSchema();
   await seedAdminFromEnv();
   scheduleViewRefresh();
 
@@ -45,6 +48,7 @@ async function bootstrap() {
   app.use('/v1/arma/events', ingestRouter);
   app.use('/api/leaderboard', leaderboardRouter);
   app.use('/api/killfeed', killfeedRouter);
+  app.use('/api/bounties', bountiesRouter);
   app.use('/api/players', playersRouter);
   app.use('/api/stats', statsRouter);
   app.use('/api/safezone', safezoneRouter);

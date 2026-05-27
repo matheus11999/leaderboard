@@ -53,6 +53,10 @@ function emptySafezoneSide() {
 const RANKINGS = {};
 const HIGHLIGHTS = {};
 const SAFEZONE = {};
+const BOUNTIES = {
+  active: [],
+  completed: [],
+};
 const SERVER_STATS = {
   onlineNow: 0,
   maxPlayers: 80,
@@ -61,6 +65,7 @@ const SERVER_STATS = {
   totalPvpKills: 0,
   activeMissions: 0,
   killsLast24h: 0,
+  activeBounties: 0,
 };
 for (const p of PERIODS) {
   RANKINGS[p] = { pvp: [], pve: [] };
@@ -186,6 +191,7 @@ window.GAME_DATA = {
   RANKINGS,
   HIGHLIGHTS,
   SAFEZONE,
+  BOUNTIES,
   SERVER_STATS,
   formatAlive,
   formatBRL,
@@ -234,6 +240,33 @@ async function fetchSafezone(period) {
   };
 }
 
+async function fetchBounties() {
+  const [active, completed] = await Promise.all([
+    getJson(`/api/bounties/active?limit=5`),
+    getJson(`/api/bounties/completed?limit=5`),
+  ]);
+
+  BOUNTIES.active = (active.rows || []).map((r) => ({
+    uid: r.uid || null,
+    nick: r.name || "—",
+    streak: Number(r.current_kill_streak) || 0,
+    bestStreak: Number(r.best_kill_streak) || 0,
+    value: Number(r.bounty_value) || 0,
+    since: r.bounty_started_at || null,
+  }));
+
+  BOUNTIES.completed = (completed.rows || []).map((r) => ({
+    id: String(r.id),
+    target: r.target_name || "—",
+    hunter: r.hunter_name || "—",
+    streak: Number(r.target_streak) || 0,
+    value: Number(r.bounty_value) || 0,
+    weapon: cleanWeaponName(r.weapon_name),
+    dist: Math.round(Number(r.distance_m) || 0),
+    occurredAt: r.occurred_at || null,
+  }));
+}
+
 async function fetchKillFeed() {
   const data = await getJson(`/api/killfeed?limit=50`);
   KILL_FEED.length = 0;
@@ -248,6 +281,7 @@ async function fetchServerStats() {
   SERVER_STATS.totalPvpKills = Number(data.total_pvp_kills) || 0;
   SERVER_STATS.activeMissions = Number(data.active_missions) || 0;
   SERVER_STATS.killsLast24h = Number(data.kills_last_24h) || 0;
+  SERVER_STATS.activeBounties = Number(data.active_bounties) || 0;
 }
 
 async function refreshAll() {
@@ -255,6 +289,7 @@ async function refreshAll() {
     await Promise.all([
       ...PERIODS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
       ...PERIODS.map((p) => fetchSafezone(p)),
+      fetchBounties(),
       fetchKillFeed(),
       fetchServerStats(),
     ]);

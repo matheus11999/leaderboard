@@ -2304,6 +2304,105 @@ button { font-family: inherit; cursor: pointer; }
 /* =================================================================
    PAGE FOOTER
    ================================================================= */
+.bounty-section {
+  margin-top: 18px;
+}
+.bounty-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 760px) { .bounty-grid { grid-template-columns: 1fr; } }
+.bounty-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 180px;
+  padding: 18px;
+  background: linear-gradient(180deg, var(--surface-2), var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.bounty-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(135deg, transparent 49%, var(--border) 49%, var(--border) 51%, transparent 51%);
+  background-size: 18px 18px;
+  opacity: 0.08;
+  pointer-events: none;
+}
+.bounty-card-hot {
+  border-color: rgba(214,38,45,0.5);
+  box-shadow: inset 0 0 0 1px rgba(214,38,45,0.08);
+}
+.bounty-target {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.bounty-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+}
+.bounty-target strong {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 0.95;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.bounty-target span:last-child {
+  font-family: var(--font-cond);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+.bounty-value {
+  position: relative;
+  z-index: 1;
+  margin-top: 22px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.bounty-value span,
+.bounty-meta span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.bounty-value strong {
+  font-family: var(--font-display);
+  font-size: 36px;
+  line-height: 0.9;
+  color: var(--primary);
+}
+.bounty-meta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+.bounty-meta span {
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text-muted);
+}
+
 .ft3 {
   display: flex;
   justify-content: space-between;

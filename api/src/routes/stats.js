@@ -20,6 +20,9 @@ router.get('/server', async (_req, res) => {
     const last24h = await db.query(
       `SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours'`
     );
+    const activeBounties = await db.query(
+      `SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`
+    );
 
     res.json({
       online_now: online.rows[0].n,
@@ -28,6 +31,7 @@ router.get('/server', async (_req, res) => {
       total_pvp_kills: totalPvP.rows[0].n,
       active_missions: activeMissions.rows[0].n,
       kills_last_24h: last24h.rows[0].n,
+      active_bounties: activeBounties.rows[0].n,
     });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });

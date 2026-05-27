@@ -1031,6 +1031,74 @@ function SafezoneSection({ data, period }) {
   );
 }
 
+function BountySection({ data }) {
+  const { formatBRL } = window.GAME_DATA;
+  const active = data?.active || [];
+  const completed = data?.completed || [];
+  const top = active[0] || { nick: "—", streak: 0, value: 0 };
+  const latest = completed[0] || { hunter: "—", target: "—", streak: 0, value: 0, weapon: "—", dist: 0 };
+
+  return (
+    <section className="bounty-section" data-screen-label="Bounty">
+      <header className="sz-section-head">
+        <div className="sz-section-l">
+          <span className="sz-section-eyebrow">
+            <span className="sz-section-eyebrow-line" />
+            CAÇADAS ATIVAS
+          </span>
+          <h2 className="sz-section-title">BOUNTY <span className="accent">//</span> KILL STREAK</h2>
+        </div>
+        <div className="sz-section-r">
+          <span className="sz-section-badge">{active.length} ALVOS</span>
+        </div>
+      </header>
+
+      <div className="bounty-grid">
+        <article className="bounty-card bounty-card-hot">
+          <CornerMarks />
+          <header className="hl3-head">
+            <span className="hl3-eyebrow">
+              <span className="hl3-eyebrow-dot" />
+              MAIS PROCURADO
+            </span>
+            <span className="hl3-badge"><CrosshairIcon size={11} /> ATIVO</span>
+          </header>
+          <div className="bounty-target">
+            <span className="bounty-label">ALVO</span>
+            <strong>{top.nick}</strong>
+            <span>{top.streak} kills sem morrer</span>
+          </div>
+          <div className="bounty-value">
+            <span>RECOMPENSA</span>
+            <strong>{formatBRL(top.value)}</strong>
+          </div>
+        </article>
+
+        <article className="bounty-card">
+          <CornerMarks />
+          <header className="hl3-head">
+            <span className="hl3-eyebrow">
+              <span className="hl3-eyebrow-dot" />
+              ÚLTIMA CAÇADA FINALIZADA
+            </span>
+            <span className="hl3-badge"><SkullIcon size={11} /> CLAIM</span>
+          </header>
+          <div className="bounty-target">
+            <span className="bounty-label">CAÇADOR</span>
+            <strong>{latest.hunter}</strong>
+            <span>derrubou {latest.target} com sequência de {latest.streak}</span>
+          </div>
+          <div className="bounty-meta">
+            <span>{latest.weapon}</span>
+            <span>{latest.dist}m</span>
+            <span>{formatBRL(latest.value)}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+  );
+}
+
 // ===================================================================
 // ROOT
 // ===================================================================
@@ -1053,6 +1121,7 @@ function App() {
   const players = window.GAME_DATA.RANKINGS[period][mode];
   const highlights = window.GAME_DATA.HIGHLIGHTS[period][mode];
   const safezone = window.GAME_DATA.SAFEZONE[period];
+  const bounties = window.GAME_DATA.BOUNTIES;
   const top3 = players.slice(0, 3);
 
   useEffect(() => {
@@ -1090,6 +1159,8 @@ function App() {
             <LongestShotCard data={highlights.longestShot} />
             <LongestAliveCard data={highlights.longestAlive} />
           </section>
+
+          <BountySection data={bounties} />
 
           <SafezoneSection data={safezone} period={period} />
 

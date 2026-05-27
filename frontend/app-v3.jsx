@@ -3,7 +3,7 @@
 // ===================================================================
 const { useState, useEffect, useMemo } = React;
 
-const PERIODS = [
+const UI_PERIODS = [
   { id: "daily",   label: "DIÁRIO",  short: "24H" },
   { id: "weekly",  label: "SEMANAL", short: "7D"  },
   { id: "monthly", label: "MENSAL",  short: "30D" },
@@ -85,7 +85,7 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
             <span className="hero-u-online-num">{online !== null ? online : "—"}</span>
           </div>
           <div className="hero-u-period" role="tablist">
-            {PERIODS.map((p) => (
+            {UI_PERIODS.map((p) => (
               <button key={p.id} role="tab" aria-selected={period === p.id}
                 className={`hero-u-period-btn ${period === p.id ? "is-active" : ""}`}
                 onClick={() => setPeriod(p.id)}>
@@ -107,7 +107,7 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
 
       <div className="hero-u-eyebrow">
         <span className="hero-u-eyebrow-line" />
-        <span>TOP 3 · {PERIODS.find(p => p.id === period).label} · {mode.toUpperCase()}</span>
+        <span>TOP 3 · {(UI_PERIODS.find(p => p.id === period) || UI_PERIODS[0]).label} · {mode.toUpperCase()}</span>
         <span className="hero-u-eyebrow-line" />
       </div>
 
@@ -280,8 +280,10 @@ function HuntCard({ bounties }) {
     ? active.map((a) => ({ id: a.uid || a.nick, hunter: a.nick, streak: a.streak, bounty: a.value, status: "active", ender: null, enderWeapon: null, enderDist: null }))
     : [];
 
+  const statusClass = isActive ? "active" : "ended";
+
   return (
-    <article className={`ls-card hu-card hu-${main.status}`}>
+    <article className={`ls-card hu-card hu-${statusClass}`}>
       <span className="ls-glow hu-glow" aria-hidden="true" />
       {isActive && <span className="hu-scan" aria-hidden="true" />}
       <header className="ls-head">
@@ -419,7 +421,7 @@ function SafezoneCard({ kind, data }) {
 }
 
 function SafezoneSection({ data, period }) {
-  const periodLabel = PERIODS.find((p) => p.id === period).label;
+  const periodLabel = (UI_PERIODS.find((p) => p.id === period) || UI_PERIODS[0]).label;
   return (
     <section className="sz-section" data-screen-label="Safezone">
       <header className="sz-section-head">
@@ -483,7 +485,7 @@ function RankTable({ period }) {
       <header className="table-head">
         <div>
           <h2>RANKING TOP 10</h2>
-          <p>{filterTitle} · {PERIODS.find(p => p.id === period).label}</p>
+          <p>{filterTitle} · {(UI_PERIODS.find(p => p.id === period) || UI_PERIODS[0]).label}</p>
         </div>
         <div className="rt-filters">
           {[

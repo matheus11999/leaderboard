@@ -16,7 +16,7 @@
 //   → fires 'gamedata-updated' event
 // ===================================================================
 
-const PERIODS = ["daily", "weekly", "monthly"];
+const DATA_PERIOD_IDS = ["daily", "weekly", "monthly"];
 const MODES = ["pvp", "pve"];
 const TOP_LIMIT = 20;
 const REFRESH_MS = 30_000;
@@ -71,7 +71,7 @@ const SERVER_STATS = {
   killsLast24h: 0,
   activeBounties: 0,
 };
-for (const p of PERIODS) {
+for (const p of DATA_PERIOD_IDS) {
   RANKINGS[p] = { pvp: [], pve: [] };
   HIGHLIGHTS[p] = {
     pvp: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
@@ -300,8 +300,8 @@ async function fetchServerStats() {
 async function refreshAll() {
   try {
     await Promise.all([
-      ...PERIODS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
-      ...PERIODS.map((p) => fetchSafezone(p)),
+      ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
+      ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p)),
       fetchBounties(),
       fetchServerStats(),
     ]);

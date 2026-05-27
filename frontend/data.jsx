@@ -152,6 +152,7 @@ window.GAME_DATA = {
   RANKINGS,
   HIGHLIGHTS,
   SAFEZONE,
+  HUNTS: { daily: [], weekly: [], monthly: [] },
   formatAlive,
   formatBRL,
   makeKillEvent,

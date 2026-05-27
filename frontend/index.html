@@ -1579,7 +1579,24 @@ button { font-family: inherit; cursor: pointer; }
 
 .kf-body { position: relative; z-index: 1; flex: 1; min-width: 0; color: var(--text); }
 .kf-tags { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
-.kf-time { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.12em; color: var(--text-dim); }
+.kf-time {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.065), rgba(255,255,255,0.015)),
+    rgba(0,0,0,0.26);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: inset 2px 0 0 currentColor;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.kf-row.pvp .kf-time { color: var(--primary); border-color: rgba(193,39,45,0.28); background-color: rgba(193,39,45,0.08); }
+.kf-row.pve .kf-time { color: #84cc16; border-color: rgba(132,204,22,0.24); background-color: rgba(132,204,22,0.07); }
 .kf-tag { font-family: var(--font-display); font-weight: 600; font-size: 9px; letter-spacing: 0.2em; padding: 1px 5px; border: 1px solid; }
 .kf-tag.pvp { color: var(--primary); border-color: rgba(193,39,45,0.55); }
 .kf-tag.pve { color: #84cc16; border-color: rgba(132,204,22,0.55); }

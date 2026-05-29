@@ -11,12 +11,16 @@ const API_BASE = '/api/admin';
 const state = {
   user: null,
   current: 'overview',
+  servers: [],
+  selectedServer: '',
   pagers: {
+    servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
     kills:    { offset: 0, limit: 50, total: 0 },
     sessions: { offset: 0, limit: 50, total: 0 },
     shop:     { offset: 0, limit: 50, total: 0 },
     bounty:   { offset: 0, limit: 50, total: 0 },
+    payments: { offset: 0, limit: 50, total: 0 },
     missions: { offset: 0, limit: 50, total: 0 },
     events:   { offset: 0, limit: 100, total: 0 },
   },
@@ -48,6 +52,12 @@ async function api(method, path, body) {
   return data;
 }
 
+function withServer(path) {
+  if (!state.selectedServer) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return path + sep + 'server_id=' + encodeURIComponent(state.selectedServer);
+}
+
 // ---------- screens ----------
 function showLogin() {
   document.getElementById('login-screen').classList.remove('hidden');
@@ -56,7 +66,7 @@ function showLogin() {
 function showDashboard() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
-  switchTab(state.current);
+  loadServers().then(() => switchTab(state.current)).catch(() => switchTab(state.current));
 }
 
 // ---------- auth ----------
@@ -105,11 +115,13 @@ function switchTab(name) {
 async function refreshTab(name) {
   switch (name) {
     case 'overview': return loadOverview();
+    case 'servers':  return loadServers();
     case 'players':  return loadPlayers();
     case 'kills':    return loadKills();
     case 'sessions': return loadSessions();
     case 'shop':     return loadShop();
     case 'bounty':   return loadBounty();
+    case 'payments': return loadPayments();
     case 'missions': return loadMissions();
     case 'events':   return loadEvents();
   }
@@ -120,7 +132,7 @@ async function loadOverview() {
   const container = document.getElementById('overview-stats');
   container.innerHTML = '<div class="stat-card-label">CARREGANDO…</div>';
   try {
-    const d = await api('GET', '/overview');
+    const d = await api('GET', withServer('/overview'));
     const cards = [
       { label: 'PLAYERS REGISTRADOS', value: d.players },
       { label: 'ONLINE AGORA', value: d.sessions_open },
@@ -159,7 +171,7 @@ async function loadPlayers() {
   if (search) q.set('search', search);
   if (banned) q.set('banned', banned);
   try {
-    const d = await api('GET', '/players?' + q);
+    const d = await api('GET', withServer('/players?' + q));
     pager.total = d.total;
     renderTable('players-table', [
       { key: 'uid', label: 'UID' },
@@ -200,10 +212,11 @@ async function loadKills() {
   if (s) q.set('search', s);
   if (t) q.set('killer_type', t);
   try {
-    const d = await api('GET', '/kills?' + q);
+    const d = await api('GET', withServer('/kills?' + q));
     pager.total = d.total;
     renderTable('kills-table', [
       { key: 'occurred_at', label: 'QUANDO', render: v => fmtDate(v) },
+      { key: 'server_id', label: 'SERVER' },
       { key: 'killer_name', label: 'KILLER', render: v => v || '—' },
       { key: 'killer_type', label: 'TIPO', render: v => `<span class="pill">${v}</span>` },
       { key: 'victim_name', label: 'VÍTIMA' },
@@ -224,10 +237,11 @@ async function loadSessions() {
   const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
   if (open) q.set('open', open);
   try {
-    const d = await api('GET', '/sessions?' + q);
+    const d = await api('GET', withServer('/sessions?' + q));
     pager.total = d.total;
     renderTable('sessions-table', [
       { key: 'connected_at', label: 'INÍCIO', render: v => fmtDate(v) },
+      { key: 'server_id', label: 'SERVER' },
       { key: 'disconnected_at', label: 'FIM', render: v => v ? fmtDate(v) : '<span class="pill is-ok">ABERTA</span>' },
       { key: 'player_name', label: 'JOGADOR', render: (v, r) => v || r.player_uid || '—' },
       { key: 'duration_s', label: 'DURAÇÃO', render: v => fmtSeconds(v) },
@@ -248,10 +262,11 @@ async function loadShop() {
   if (s) q.set('search', s);
   if (p) q.set('is_purchase', p);
   try {
-    const d = await api('GET', '/shop_events?' + q);
+    const d = await api('GET', withServer('/shop_events?' + q));
     pager.total = d.total;
     renderTable('shop-table', [
       { key: 'occurred_at', label: 'QUANDO', render: v => fmtDate(v) },
+      { key: 'server_id', label: 'SERVER' },
       { key: 'player_name', label: 'PLAYER' },
       { key: 'item_name', label: 'ITEM' },
       { key: 'quantity', label: 'QTD' },
@@ -279,7 +294,7 @@ async function loadBounty() {
     const claimed = document.getElementById('bounty-claimed').value;
     const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
     if (claimed) q.set('claimed', claimed);
-    const d = await api('GET', '/bounty/rewards?' + q);
+    const d = await api('GET', withServer('/bounty/rewards?' + q));
     pager.total = d.total;
     renderTable('bounty-table', [
       { key: 'occurred_at', label: 'QUANDO', render: v => fmtDate(v) },
@@ -316,6 +331,175 @@ async function saveBountySettings() {
   }
 }
 
+// ---------- servers ----------
+async function loadServers() {
+  const d = await api('GET', '/servers');
+  state.servers = d.rows || [];
+  renderServerSelects();
+  renderTable('servers-table', [
+    { key: 'id', label: 'ID' },
+    { key: 'name', label: 'NOME' },
+    { key: 'slug', label: 'PAGINA', render: (_v, r) => `<a href="/server/${encodeURIComponent(r.id)}" target="_blank">${escapeHtml('/server/' + r.id)}</a>` },
+    { key: 'public_enabled', label: 'PUBLICO', render: v => v ? '<span class="pill is-ok">SIM</span>' : '<span class="pill">NAO</span>' },
+    { key: 'is_default', label: 'PADRAO', render: v => v ? '<span class="pill is-warn">PADRAO</span>' : '<span class="pill">-</span>' },
+    { key: 'updated_at', label: 'ATUALIZADO', render: v => fmtDate(v) },
+  ], state.servers, [
+    { label: 'EDIT', onClick: fillServerForm },
+    { label: 'DEL', kind: 'danger', onClick: r => confirmDelete('servidor ' + r.id, () => apiDelete('/servers/' + encodeURIComponent(r.id), 'servers')) },
+  ]);
+}
+
+function renderServerSelects() {
+  const options = [
+    '<option value="">Todos servidores</option>',
+    ...state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`),
+  ].join('');
+  const filter = document.getElementById('admin-server-filter');
+  if (filter) {
+    filter.innerHTML = options;
+    filter.value = state.selectedServer;
+  }
+
+  const payment = document.getElementById('payments-server');
+  if (payment) {
+    const paymentOptions = state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`).join('');
+    payment.innerHTML = paymentOptions || '<option value="brasilz-main">brasilz-main</option>';
+    if (state.selectedServer) payment.value = state.selectedServer;
+  }
+}
+
+function fillServerForm(row) {
+  document.getElementById('server-id').value = row.id || '';
+  document.getElementById('server-name').value = row.name || '';
+  document.getElementById('server-slug').value = row.slug || '';
+  document.getElementById('server-public').checked = !!row.public_enabled;
+  document.getElementById('server-default').checked = !!row.is_default;
+}
+
+async function saveServer() {
+  const status = document.getElementById('server-status');
+  const id = document.getElementById('server-id').value.trim();
+  const body = {
+    id,
+    name: document.getElementById('server-name').value.trim() || id,
+    slug: document.getElementById('server-slug').value.trim() || id,
+    public_enabled: document.getElementById('server-public').checked,
+    is_default: document.getElementById('server-default').checked,
+  };
+  if (!id) {
+    status.textContent = 'Informe o ID do servidor.';
+    return;
+  }
+
+  status.textContent = 'Salvando...';
+  try {
+    await api('POST', '/servers', body);
+    status.textContent = 'Servidor salvo.';
+    setTimeout(() => { if (status.textContent === 'Servidor salvo.') status.textContent = ''; }, 2500);
+    await loadServers();
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  }
+}
+
+// ---------- manual payments ----------
+async function loadPaymentPlayers() {
+  const select = document.getElementById('payments-player');
+  const search = document.getElementById('payments-player-search').value.trim();
+  const q = new URLSearchParams({ limit: 200 });
+  if (search) q.set('search', search);
+
+  select.innerHTML = '<option value="">Carregando...</option>';
+  try {
+    const d = await api('GET', withServer('/payments/players?' + q));
+    const rows = d.rows || [];
+    if (!rows.length) {
+      select.innerHTML = '<option value="">Nenhum jogador encontrado</option>';
+      return;
+    }
+    select.innerHTML = rows.map((p) => {
+      const name = escapeHtml(p.name || 'Unknown');
+      const uid = escapeHtml(p.uid || '');
+      const seen = p.last_seen ? fmtDate(p.last_seen) : 'sem data';
+      return `<option value="${uid}">${name} | ${uid.slice(0, 8)} | ${seen}</option>`;
+    }).join('');
+  } catch (err) {
+    select.innerHTML = '<option value="">Erro ao carregar jogadores</option>';
+    alert('Erro jogadores pagamento: ' + err.message);
+  }
+}
+
+async function createPayment() {
+  const status = document.getElementById('payments-status');
+  const playerUid = document.getElementById('payments-player').value;
+  const amount = Number(document.getElementById('payments-amount').value);
+  const serverId = document.getElementById('payments-server').value.trim() || state.selectedServer || 'brasilz-main';
+  const note = document.getElementById('payments-note').value.trim();
+
+  if (!playerUid) {
+    status.textContent = 'Selecione um jogador.';
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    status.textContent = 'Informe um valor maior que zero.';
+    return;
+  }
+
+  status.textContent = 'Criando...';
+  try {
+    await api('POST', '/payments', {
+      player_uid: playerUid,
+      amount: Math.round(amount),
+      server_id: serverId,
+      note,
+    });
+    document.getElementById('payments-amount').value = '';
+    document.getElementById('payments-note').value = '';
+    status.textContent = 'Pagamento criado. Vai pagar quando o player estiver online.';
+    setTimeout(() => { if (status.textContent.startsWith('Pagamento criado')) status.textContent = ''; }, 3500);
+    state.pagers.payments.offset = 0;
+    loadPayments();
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  }
+}
+
+async function loadPayments() {
+  const pager = state.pagers.payments;
+  const claimed = document.getElementById('payments-claimed').value;
+  const search = document.getElementById('payments-search').value.trim();
+  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+  if (claimed) q.set('claimed', claimed);
+  if (search) q.set('search', search);
+
+  try {
+    if (!document.getElementById('payments-player').options.length) {
+      await loadPaymentPlayers();
+    }
+    const d = await api('GET', withServer('/payments?' + q));
+    pager.total = d.total;
+    renderTable('payments-table', [
+      { key: 'created_at', label: 'CRIADO', render: v => fmtDate(v) },
+      { key: 'player_name', label: 'JOGADOR' },
+      { key: 'player_uid', label: 'UID', render: v => v || 'â€”' },
+      { key: 'amount', label: 'VALOR', render: v => formatBRL(v) },
+      { key: 'server_id', label: 'SERVIDOR' },
+      { key: 'claimed', label: 'STATUS', render: v => v ? '<span class="pill is-ok">PAGO</span>' : '<span class="pill is-warn">PENDENTE</span>' },
+      { key: 'claimed_at', label: 'PAGO EM', render: v => v ? fmtDate(v) : 'â€”' },
+      { key: 'note', label: 'OBS', render: v => v ? escapeHtml(v) : 'â€”' },
+      { key: 'created_by', label: 'ADMIN', render: v => v || 'â€”' },
+    ], d.rows, [
+      { label: 'DEL', kind: 'danger', onClick: r => {
+        if (r.claimed) return alert('Pagamento ja foi pago e nao pode ser removido.');
+        confirmDelete('pagamento #' + r.id, () => apiDelete('/payments/' + r.id, 'payments'));
+      } },
+    ]);
+    renderPager('payments-pager', 'payments');
+  } catch (err) {
+    alert('Erro pagamentos: ' + err.message);
+  }
+}
+
 // ---------- missions ----------
 async function loadMissions() {
   const pager = state.pagers.missions;
@@ -325,10 +509,11 @@ async function loadMissions() {
   if (s) q.set('search', s);
   if (a) q.set('active', a);
   try {
-    const d = await api('GET', '/missions?' + q);
+    const d = await api('GET', withServer('/missions?' + q));
     pager.total = d.total;
     renderTable('missions-table', [
       { key: 'started_at', label: 'INÍCIO', render: v => fmtDate(v) },
+      { key: 'server_id', label: 'SERVER' },
       { key: 'ended_at', label: 'FIM', render: v => v ? fmtDate(v) : '<span class="pill is-ok">ATIVA</span>' },
       { key: 'sub_idx', label: 'SUB IDX' },
       { key: 'mission_name', label: 'NOME' },
@@ -352,7 +537,7 @@ async function loadEvents() {
   if (p) q.set('processed', p);
   if (e) q.set('has_error', e);
   try {
-    const d = await api('GET', '/events?' + q);
+    const d = await api('GET', withServer('/events?' + q));
     pager.total = d.total;
     renderTable('events-table', [
       { key: 'received_at', label: 'RECEBIDO', render: v => fmtDate(v) },
@@ -507,6 +692,12 @@ function bindUI() {
   document.getElementById('login-form').addEventListener('submit', doLogin);
   document.getElementById('btn-logout').addEventListener('click', doLogout);
   document.getElementById('modal-cancel').addEventListener('click', hideModal);
+  document.getElementById('admin-server-filter').addEventListener('change', (ev) => {
+    state.selectedServer = ev.target.value;
+    for (const pager of Object.values(state.pagers)) pager.offset = 0;
+    renderServerSelects();
+    refreshTab(state.current);
+  });
   for (const btn of document.querySelectorAll('.tab')) {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   }
@@ -517,13 +708,17 @@ function bindUI() {
     });
   }
   // Search filters refresh on Enter or change.
-  for (const id of ['players-search', 'kills-search', 'shop-search', 'missions-search']) {
+  for (const id of ['players-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
     document.getElementById(id).addEventListener('change', () => switchTab(state.current));
   }
-  for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'bounty-claimed', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
+  document.getElementById('server-save').addEventListener('click', saveServer);
+  for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'bounty-claimed', 'payments-claimed', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
     document.getElementById(id).addEventListener('change', () => switchTab(state.current));
   }
   document.getElementById('bounty-save').addEventListener('click', saveBountySettings);
+  document.getElementById('payments-player-refresh').addEventListener('click', loadPaymentPlayers);
+  document.getElementById('payments-player-search').addEventListener('change', loadPaymentPlayers);
+  document.getElementById('payments-create').addEventListener('click', createPayment);
   document.getElementById('events-purge').addEventListener('click', purgeOldEvents);
 }
 

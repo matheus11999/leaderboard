@@ -48,6 +48,9 @@
       <span class="brand-bracket">]</span>
     </div>
     <div class="topbar-r">
+      <select id="admin-server-filter" class="select-input">
+        <option value="">Todos servidores</option>
+      </select>
       <span class="topbar-user" id="topbar-user">—</span>
       <button id="btn-logout" class="btn-ghost">SAIR</button>
     </div>
@@ -55,11 +58,13 @@
 
   <nav class="tabs">
     <button class="tab is-active" data-tab="overview">OVERVIEW</button>
+    <button class="tab" data-tab="servers">SERVIDORES</button>
     <button class="tab" data-tab="players">JOGADORES</button>
     <button class="tab" data-tab="kills">MORTES</button>
     <button class="tab" data-tab="sessions">SESSÕES</button>
     <button class="tab" data-tab="shop">LOJA</button>
     <button class="tab" data-tab="bounty">BOUNTY</button>
+    <button class="tab" data-tab="payments">PAGAMENTOS</button>
     <button class="tab" data-tab="missions">MISSÕES</button>
     <button class="tab" data-tab="events">EVENTOS RAW</button>
   </nav>
@@ -69,6 +74,43 @@
     <section class="tab-pane is-active" id="pane-overview">
       <h2 class="pane-title">VISÃO GERAL <span class="accent">// PRIVADO</span></h2>
       <div class="stats-grid" id="overview-stats"></div>
+    </section>
+
+    <!-- SERVERS -->
+    <section class="tab-pane" id="pane-servers">
+      <h2 class="pane-title">SERVIDORES</h2>
+      <div class="settings-card">
+        <div class="settings-grid">
+          <label class="field">
+            <span class="field-label">ID DO SERVIDOR</span>
+            <input type="text" id="server-id" placeholder="brasilz-main" />
+          </label>
+          <label class="field">
+            <span class="field-label">NOME PUBLICO</span>
+            <input type="text" id="server-name" placeholder="BrasilZ Main" />
+          </label>
+          <label class="field">
+            <span class="field-label">SLUG/PAGINA</span>
+            <input type="text" id="server-slug" placeholder="brasilz-main" />
+          </label>
+          <label class="check-field">
+            <input type="checkbox" id="server-public" checked />
+            <span>Publico</span>
+          </label>
+          <label class="check-field">
+            <input type="checkbox" id="server-default" />
+            <span>Padrao</span>
+          </label>
+        </div>
+        <div class="toolbar">
+          <button class="btn-primary" id="server-save">SALVAR SERVIDOR</button>
+          <span class="form-status" id="server-status"></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn-ghost" data-refresh="servers">ATUALIZAR</button>
+      </div>
+      <div class="table-wrap"><table id="servers-table" class="data-table"></table></div>
     </section>
 
     <!-- PLAYERS -->
@@ -175,6 +217,50 @@
       </div>
       <div class="table-wrap"><table id="bounty-table" class="data-table"></table></div>
       <div class="pager" id="bounty-pager"></div>
+    </section>
+
+    <!-- PAYMENTS -->
+    <section class="tab-pane" id="pane-payments">
+      <h2 class="pane-title">PAGAMENTOS <span class="accent">// MANUAL</span></h2>
+      <div class="settings-card">
+        <div class="toolbar">
+          <input type="text" id="payments-player-search" class="search-input" placeholder="Buscar jogador..." />
+          <button class="btn-ghost" id="payments-player-refresh" type="button">BUSCAR</button>
+        </div>
+        <div class="settings-grid">
+          <label class="field">
+            <span class="field-label">JOGADOR</span>
+            <select id="payments-player" class="select-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">VALOR</span>
+            <input type="number" id="payments-amount" min="1" step="1" placeholder="50000" />
+          </label>
+          <label class="field">
+            <span class="field-label">SERVIDOR</span>
+            <select id="payments-server" class="select-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">OBS</span>
+            <input type="text" id="payments-note" placeholder="Opcional" />
+          </label>
+        </div>
+        <div class="toolbar">
+          <button class="btn-primary" id="payments-create">CRIAR PAGAMENTO</button>
+          <span class="form-status" id="payments-status"></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input type="text" id="payments-search" class="search-input" placeholder="Buscar jogador ou UID..." />
+        <select id="payments-claimed" class="select-input">
+          <option value="">Todos pagamentos</option>
+          <option value="false">Pendentes</option>
+          <option value="true">Pagos</option>
+        </select>
+        <button class="btn-ghost" data-refresh="payments">ATUALIZAR</button>
+      </div>
+      <div class="table-wrap"><table id="payments-table" class="data-table"></table></div>
+      <div class="pager" id="payments-pager"></div>
     </section>
 
     <!-- MISSIONS -->

@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db');
+const { serverFilter } = require('../lib/servers');
 
 const router = express.Router();
 
@@ -12,8 +13,13 @@ router.get('/', async (req, res) => {
 
   const since = req.query.since;
   const type = String(req.query.type || '').toLowerCase();
+  const selectedServer = serverFilter(req);
   const params = [limit];
   const conds = ['k.is_suicide = false'];
+  if (selectedServer) {
+    params.push(selectedServer);
+    conds.push(`k.server_id = $${params.length}`);
+  }
   if (type === 'pvp') conds.push('k.is_pvp = true');
   else if (type === 'pve') conds.push('k.is_pvp = false');
   if (since) {
@@ -33,6 +39,7 @@ router.get('/', async (req, res) => {
                   FROM bounty_events b
                  WHERE b.target_uid = k.victim_uid
                    AND b.hunter_uid = k.killer_uid
+                   AND b.server_id = k.server_id
                    AND ABS(EXTRACT(EPOCH FROM (b.occurred_at - k.occurred_at))) <= 5
               ) AS is_bounty_kill
          FROM kills k

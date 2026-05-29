@@ -1,8 +1,9 @@
 'use strict';
 
 const db = require('../db');
+const { normalizeServerId } = require('../lib/servers');
 
-module.exports = async function (data) {
+module.exports = async function (data, envelope = {}) {
   const killer = data?.killer?.player || data?.killer;
   const victim = data?.victim || {};
   if (!killer?.uid) return;
@@ -11,6 +12,7 @@ module.exports = async function (data) {
   const pos = victim.position || {};
   const distanceM = Number(data.distance_m);
   const safeDistanceM = Number.isFinite(distanceM) ? distanceM : null;
+  const serverId = normalizeServerId(envelope.server_id || data.server_id);
 
   await db.tx(async (c) => {
     await c.query(
@@ -22,17 +24,18 @@ module.exports = async function (data) {
 
     await c.query(
       `INSERT INTO kills (
-         occurred_at, victim_uid, victim_name, victim_position, victim_prefab,
+         occurred_at, server_id, victim_uid, victim_name, victim_position, victim_prefab,
          killer_type, killer_uid, killer_name, killer_prefab,
          weapon_name, weapon_prefab, distance_m,
          is_pvp, is_suicide
        ) VALUES (
-         NOW(), NULL, $1, POINT($2, $3), $4,
-         'player', $5, $6, $7,
-         $8, $9, $10,
+         NOW(), $1, NULL, $2, POINT($3, $4), $5,
+         'player', $6, $7, $8,
+         $9, $10, $11,
          false, false
        )`,
       [
+        serverId,
         victim.name || victim.type || 'NPC',
         Number(pos.x) || 0,
         Number(pos.z) || 0,

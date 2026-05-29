@@ -1,15 +1,17 @@
 'use strict';
 
 const db = require('../db');
+const { normalizeServerId } = require('../lib/servers');
 
 /**
  * player_disconnected — close the open session, add duration to total_playtime_s.
  */
-module.exports = async function (data) {
+module.exports = async function (data, envelope = {}) {
   const player = data?.player;
   if (!player?.uid) return;
 
   const balance = data.balance || {};
+  const serverId = normalizeServerId(envelope.server_id || data.server_id);
 
   await db.tx(async (c) => {
     // Close most recent open session for this player.
@@ -20,12 +22,12 @@ module.exports = async function (data) {
              balance_out     = $2
        WHERE id = (
          SELECT id FROM sessions
-          WHERE player_uid = $1 AND disconnected_at IS NULL
+          WHERE player_uid = $1 AND server_id = $3 AND disconnected_at IS NULL
           ORDER BY connected_at DESC
           LIMIT 1
        )
        RETURNING duration_s`,
-      [player.uid, balance.total ?? null]
+      [player.uid, balance.total ?? null, serverId]
     );
 
     const dur = r.rows[0]?.duration_s ?? 0;

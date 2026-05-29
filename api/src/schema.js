@@ -5,11 +5,28 @@ const logger = require('./lib/logger');
 
 async function ensureSchema() {
   const statements = [
+    `CREATE TABLE IF NOT EXISTS servers (
+       id TEXT PRIMARY KEY,
+       name TEXT NOT NULL,
+       slug TEXT UNIQUE NOT NULL,
+       public_enabled BOOL NOT NULL DEFAULT true,
+       is_default BOOL NOT NULL DEFAULT false,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`,
+    `INSERT INTO servers (id, name, slug, public_enabled, is_default)
+       VALUES ('brasilz-main', 'BrasilZ Main', 'brasilz-main', true, true)
+       ON CONFLICT (id) DO NOTHING`,
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE kills ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE missions ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS current_kill_streak INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS best_kill_streak INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_active BOOL NOT NULL DEFAULT false`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_value INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_started_at TIMESTAMPTZ`,
+    `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_server_id TEXT`,
     `CREATE TABLE IF NOT EXISTS bounty_settings (
        id BOOL PRIMARY KEY DEFAULT true CHECK (id),
        enabled BOOL NOT NULL DEFAULT true,
@@ -44,13 +61,53 @@ async function ensureSchema() {
     `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ`,
     `ALTER TABLE bounty_events ADD COLUMN IF NOT EXISTS claim_note TEXT`,
     `ALTER TABLE bounty_events ALTER COLUMN claimed SET DEFAULT false`,
+    `CREATE TABLE IF NOT EXISTS manual_payments (
+       id BIGSERIAL PRIMARY KEY,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       server_id TEXT NOT NULL DEFAULT 'brasilz-main',
+       player_uid TEXT REFERENCES players(uid) ON DELETE SET NULL,
+       player_name TEXT NOT NULL,
+       amount INT NOT NULL CHECK (amount > 0),
+       note TEXT,
+       claimed BOOL NOT NULL DEFAULT false,
+       claimed_at TIMESTAMPTZ,
+       claim_note TEXT,
+       created_by TEXT
+     )`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS player_uid TEXT REFERENCES players(uid) ON DELETE SET NULL`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS player_name TEXT NOT NULL DEFAULT 'Unknown'`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS amount INT NOT NULL DEFAULT 0`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS note TEXT`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS claimed BOOL NOT NULL DEFAULT false`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS claim_note TEXT`,
+    `ALTER TABLE manual_payments ADD COLUMN IF NOT EXISTS created_by TEXT`,
     `CREATE INDEX IF NOT EXISTS idx_players_bounty_active ON players (bounty_active, bounty_value DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_players_bounty_server ON players (bounty_server_id, bounty_value DESC) WHERE bounty_active = true`,
     `CREATE INDEX IF NOT EXISTS idx_players_current_kill_streak ON players (current_kill_streak DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_players_best_kill_streak ON players (best_kill_streak DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_occurred_at ON bounty_events (occurred_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_pending ON bounty_events (server_id, occurred_at) WHERE claimed = false`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_hunter_uid ON bounty_events (hunter_uid) WHERE hunter_uid IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_target_uid ON bounty_events (target_uid) WHERE target_uid IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_manual_payments_created_at ON manual_payments (created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_manual_payments_pending ON manual_payments (server_id, created_at) WHERE claimed = false`,
+    `CREATE INDEX IF NOT EXISTS idx_manual_payments_player_uid ON manual_payments (player_uid, created_at DESC) WHERE player_uid IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_servers_public ON servers (public_enabled, is_default DESC, name ASC)`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_server_open ON sessions (server_id, connected_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_server_open_now ON sessions (server_id) WHERE disconnected_at IS NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_kills_server_occurred_at ON kills (server_id, occurred_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_kills_server_pvp ON kills (server_id, is_pvp, occurred_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_shop_events_server_occurred_at ON shop_events (server_id, occurred_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_missions_server_started_at ON missions (server_id, started_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_events_raw_server_received_at ON events_raw (server_id, received_at DESC)`,
+    `INSERT INTO servers (id, name, slug, public_enabled, is_default)
+       SELECT DISTINCT server_id, server_id, server_id, true, false
+         FROM events_raw
+        WHERE server_id IS NOT NULL AND server_id <> ''
+       ON CONFLICT (id) DO NOTHING`,
   ];
 
   for (const sql of statements) await db.query(sql);

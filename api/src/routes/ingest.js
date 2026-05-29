@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('../db');
 const { safeEqual } = require('../lib/safeCompare');
 const logger = require('../lib/logger');
+const { ensureServer, normalizeServerId } = require('../lib/servers');
 
 const playerConnected    = require('../processors/player_connected');
 const playerDisconnected = require('../processors/player_disconnected');
@@ -38,10 +39,12 @@ router.post('/', async (req, res) => {
   if (!e || typeof e !== 'object' || !e.event_type || !e.server_id || !e.data) {
     return res.status(400).json({ error: 'invalid envelope' });
   }
+  e.server_id = normalizeServerId(e.server_id);
 
   // 1) Audit log first — even unknown event_types get stored.
   let rawId;
   try {
+    await ensureServer(db, e.server_id);
     const ins = await db.query(
       `INSERT INTO events_raw (server_id, event_type, timestamp_unix, payload)
        VALUES ($1, $2, $3, $4)

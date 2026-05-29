@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const { requireAdmin, login } = require('../auth');
+const { normalizeServerId, slugifyServerId, serverFilter, ensureServer } = require('../lib/servers');
 
 const router = express.Router();
 
@@ -56,32 +57,143 @@ function clampNumber(raw, def, min, max) {
   if (!Number.isFinite(n)) return def;
   return Math.min(max, Math.max(min, n));
 }
+function addServerCondition(req, conds, params, column = 'server_id') {
+  const selectedServer = serverFilter(req);
+  if (!selectedServer) return null;
+  params.push(selectedServer);
+  conds.push(`${column} = $${params.length}`);
+  return selectedServer;
+}
+
+// -------------------------------------------------------------------
+// Servers
+// -------------------------------------------------------------------
+router.get('/servers', async (_req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT id, name, slug, public_enabled, is_default, created_at, updated_at
+         FROM servers
+        ORDER BY is_default DESC, name ASC`
+    );
+    res.json({ rows: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.post('/servers', express.json(), async (req, res) => {
+  const id = normalizeServerId(req.body?.id || req.body?.server_id);
+  const name = String(req.body?.name || id).trim() || id;
+  const slug = String(req.body?.slug || slugifyServerId(id)).trim() || slugifyServerId(id);
+  const publicEnabled = req.body?.public_enabled !== false;
+  const isDefault = req.body?.is_default === true;
+
+  try {
+    const r = await db.tx(async (c) => {
+      if (isDefault) await c.query(`UPDATE servers SET is_default = false`);
+      return c.query(
+        `INSERT INTO servers (id, name, slug, public_enabled, is_default, updated_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (id) DO UPDATE SET
+           name = EXCLUDED.name,
+           slug = EXCLUDED.slug,
+           public_enabled = EXCLUDED.public_enabled,
+           is_default = EXCLUDED.is_default,
+           updated_at = NOW()
+         RETURNING id, name, slug, public_enabled, is_default, created_at, updated_at`,
+        [id, name, slug, publicEnabled, isDefault]
+      );
+    });
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'create failed', message: err.message });
+  }
+});
+
+router.patch('/servers/:id', express.json(), async (req, res) => {
+  const id = normalizeServerId(req.params.id);
+  const fields = [];
+  const params = [id];
+  if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+    params.push(req.body.name.trim());
+    fields.push(`name = $${params.length}`);
+  }
+  if (typeof req.body?.slug === 'string' && req.body.slug.trim()) {
+    params.push(req.body.slug.trim());
+    fields.push(`slug = $${params.length}`);
+  }
+  if (typeof req.body?.public_enabled === 'boolean') {
+    params.push(req.body.public_enabled);
+    fields.push(`public_enabled = $${params.length}`);
+  }
+  if (typeof req.body?.is_default === 'boolean') {
+    params.push(req.body.is_default);
+    fields.push(`is_default = $${params.length}`);
+  }
+  if (!fields.length) return res.status(400).json({ error: 'no fields to update' });
+
+  try {
+    const r = await db.tx(async (c) => {
+      if (req.body?.is_default === true) await c.query(`UPDATE servers SET is_default = false`);
+      return c.query(
+        `UPDATE servers
+            SET ${fields.join(', ')}, updated_at = NOW()
+          WHERE id = $1
+          RETURNING id, name, slug, public_enabled, is_default, created_at, updated_at`,
+        params
+      );
+    });
+    if (!r.rows[0]) return res.status(404).json({ error: 'not found' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'update failed', message: err.message });
+  }
+});
+
+router.delete('/servers/:id', async (req, res) => {
+  const id = normalizeServerId(req.params.id);
+  try {
+    const r = await db.query(
+      `DELETE FROM servers WHERE id = $1 AND is_default = false
+       RETURNING id, name, slug`,
+      [id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'server not found or default server cannot be removed' });
+    res.json({ deleted: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'delete failed', message: err.message });
+  }
+});
 
 // -------------------------------------------------------------------
 // Overview — private dashboard stats
 // -------------------------------------------------------------------
-router.get('/overview', async (_req, res) => {
+router.get('/overview', async (req, res) => {
   try {
+    const selectedServer = serverFilter(req);
+    const p = selectedServer ? [selectedServer] : [];
+    const where = selectedServer ? 'WHERE server_id = $1' : '';
+    const and = selectedServer ? 'AND server_id = $1' : '';
     const [
       players, sessions, openSessions, kills, killsPvp, killsLast24,
       shopRows, shopVolume, missions, missionsActive,
       eventsRaw, eventsUnprocessed, eventsLast24, bountiesActive, bountiesPending,
     ] = await Promise.all([
-      db.query(`SELECT COUNT(*)::INT AS n FROM players`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM sessions`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM kills`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours'`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM shop_events`),
-      db.query(`SELECT COALESCE(SUM(price), 0)::BIGINT AS total FROM shop_events WHERE success = true`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM missions`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM missions WHERE ended_at IS NULL`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE processed = false`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE received_at > NOW() - INTERVAL '24 hours'`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`),
-      db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events WHERE claimed = false`),
+      db.query(selectedServer ? `SELECT COUNT(DISTINCT player_uid)::INT AS n FROM sessions WHERE server_id = $1` : `SELECT COUNT(*)::INT AS n FROM players`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM sessions ${where}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM kills ${where}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours' ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM shop_events ${where}`, p),
+      db.query(`SELECT COALESCE(SUM(price), 0)::BIGINT AS total FROM shop_events WHERE success = true ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM missions ${where}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM missions WHERE ended_at IS NULL ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw ${where}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE processed = false ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM events_raw WHERE received_at > NOW() - INTERVAL '24 hours' ${and}`, p),
+      db.query(selectedServer ? `SELECT COUNT(*)::INT AS n FROM players pl WHERE bounty_active = true AND (pl.bounty_server_id = $1 OR (pl.bounty_server_id IS NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = pl.uid AND s.server_id = $1)))` : `SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events WHERE claimed = false ${and}`, p),
     ]);
 
     res.json({
@@ -155,9 +267,18 @@ router.get('/bounty/rewards', async (req, res) => {
   const claimed = req.query.claimed;
   const conds = [];
   const params = [limit, offset];
+  const countParams = [];
   if (claimed === 'true') conds.push('claimed = true');
   else if (claimed === 'false') conds.push('claimed = false');
+  const selectedServer = serverFilter(req);
+  if (selectedServer) {
+    params.push(selectedServer);
+    countParams.push(selectedServer);
+    conds.push(`server_id = $${params.length}`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const countConds = conds.map((cond) => selectedServer ? cond.replace(`$${params.length}`, `$${countParams.length}`) : cond);
+  const countWhere = countConds.length ? 'WHERE ' + countConds.join(' AND ') : '';
 
   try {
     const rowsR = await db.query(
@@ -174,10 +295,143 @@ router.get('/bounty/rewards', async (req, res) => {
         LIMIT $1 OFFSET $2`,
       params
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events ${where}`);
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM bounty_events ${countWhere}`, countParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// -------------------------------------------------------------------
+// Manual payments queue
+// -------------------------------------------------------------------
+router.get('/payments/players', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 100, 300);
+  const search = ilikePattern(req.query.search);
+  const selectedServer = serverFilter(req);
+  const params = [limit];
+  const conds = [];
+  if (search) {
+    params.push(search);
+    conds.push(`(name ILIKE $${params.length} OR uid ILIKE $${params.length})`);
+  }
+  if (selectedServer) {
+    params.push(selectedServer);
+    conds.push(`EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = players.uid AND s.server_id = $${params.length})`);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+
+  try {
+    const r = await db.query(
+      `SELECT uid, name, last_seen, current_balance
+         FROM players
+         ${where}
+        ORDER BY last_seen DESC NULLS LAST, name ASC
+        LIMIT $1`,
+      params
+    );
+    res.json({ rows: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.get('/payments', async (req, res) => {
+  const limit = clampLimit(req.query.limit);
+  const offset = clampOffset(req.query.offset);
+  const claimed = req.query.claimed;
+  const search = ilikePattern(req.query.search);
+  const selectedServer = serverFilter(req);
+  const params = [limit, offset];
+  const countParams = [];
+  const conds = [];
+  const countConds = [];
+  if (claimed === 'true') {
+    conds.push('claimed = true');
+    countConds.push('claimed = true');
+  } else if (claimed === 'false') {
+    conds.push('claimed = false');
+    countConds.push('claimed = false');
+  }
+  if (search) {
+    params.push(search);
+    countParams.push(search);
+    conds.push(`(player_name ILIKE $${params.length} OR player_uid ILIKE $${params.length})`);
+    countConds.push(`(player_name ILIKE $${countParams.length} OR player_uid ILIKE $${countParams.length})`);
+  }
+  if (selectedServer) {
+    params.push(selectedServer);
+    countParams.push(selectedServer);
+    conds.push(`server_id = $${params.length}`);
+    countConds.push(`server_id = $${countParams.length}`);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const countWhere = countConds.length ? 'WHERE ' + countConds.join(' AND ') : '';
+
+  try {
+    const rowsR = await db.query(
+      `SELECT id, created_at, server_id, player_uid, player_name, amount,
+              note, claimed, claimed_at, claim_note, created_by
+         FROM manual_payments
+         ${where}
+        ORDER BY created_at DESC
+        LIMIT $1 OFFSET $2`,
+      params
+    );
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM manual_payments ${countWhere}`, countParams);
+    res.json({ total: countR.rows[0].n, rows: rowsR.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.post('/payments', express.json(), async (req, res) => {
+  const playerUid = String(req.body?.player_uid || '').trim();
+  const serverId = normalizeServerId(req.body?.server_id);
+  const amount = Math.round(clampNumber(req.body?.amount, 0, 1, 100_000_000));
+  const note = String(req.body?.note || '').trim() || null;
+  const createdBy = req.admin?.username || 'admin';
+
+  if (!playerUid) return res.status(400).json({ error: 'player_uid is required' });
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'amount must be greater than zero' });
+
+  try {
+    await ensureServer(db, serverId);
+    const playerR = await db.query(
+      `SELECT uid, name
+         FROM players
+        WHERE uid = $1`,
+      [playerUid]
+    );
+    const player = playerR.rows[0];
+    if (!player) return res.status(404).json({ error: 'player not found' });
+
+    const r = await db.query(
+      `INSERT INTO manual_payments (
+         server_id, player_uid, player_name, amount, note, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, created_at, server_id, player_uid, player_name,
+                 amount, note, claimed, claimed_at, claim_note, created_by`,
+      [serverId, player.uid, player.name || 'Unknown', amount, note, createdBy]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'create failed', message: err.message });
+  }
+});
+
+router.delete('/payments/:id', async (req, res) => {
+  try {
+    const r = await db.query(
+      `DELETE FROM manual_payments
+        WHERE id = $1 AND claimed = false
+        RETURNING id, player_name, amount, server_id`,
+      [Number(req.params.id) || 0]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: 'payment not found or already paid' });
+    res.json({ deleted: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'delete failed', message: err.message });
   }
 });
 
@@ -189,16 +443,24 @@ router.get('/players', async (req, res) => {
   const offset = clampOffset(req.query.offset);
   const search = ilikePattern(req.query.search);
   const banned = req.query.banned;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (search) {
-    params.push(search);
-    conds.push(`(name ILIKE $${params.length} OR uid ILIKE $${params.length})`);
+    filterParams.push(search);
+    conds.push(`(name ILIKE $${filterParams.length} OR uid ILIKE $${filterParams.length})`);
   }
   if (banned === 'true') conds.push('is_banned = true');
   else if (banned === 'false') conds.push('is_banned = false');
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = players.uid AND s.server_id = $${filterParams.length})`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
@@ -209,10 +471,10 @@ router.get('/players', async (req, res) => {
          FROM players
          ${where}
         ORDER BY last_seen DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM players ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM players ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
@@ -246,7 +508,7 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
                deaths_bandit = 0, deaths_env = 0, deaths_suicide = 0,
                longest_shot_m = 0, longest_life_s = 0,
                current_kill_streak = 0, best_kill_streak = 0,
-               bounty_active = false, bounty_value = 0, bounty_started_at = NULL`);
+               bounty_active = false, bounty_value = 0, bounty_started_at = NULL, bounty_server_id = NULL`);
   }
   if (!sets.length) return res.status(400).json({ error: 'no fields to update' });
 
@@ -311,30 +573,38 @@ router.get('/kills', async (req, res) => {
   const offset = clampOffset(req.query.offset);
   const search = ilikePattern(req.query.search);
   const killerType = req.query.killer_type;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (search) {
-    params.push(search);
-    conds.push(`(victim_name ILIKE $${params.length} OR killer_name ILIKE $${params.length} OR weapon_name ILIKE $${params.length})`);
+    filterParams.push(search);
+    conds.push(`(victim_name ILIKE $${filterParams.length} OR killer_name ILIKE $${filterParams.length} OR weapon_name ILIKE $${filterParams.length})`);
   }
   if (killerType) {
-    params.push(String(killerType));
-    conds.push(`killer_type = $${params.length}`);
+    filterParams.push(String(killerType));
+    conds.push(`killer_type = $${filterParams.length}`);
+  }
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`server_id = $${filterParams.length}`);
   }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
-      `SELECT id, occurred_at, victim_uid, victim_name, killer_type, killer_uid, killer_name,
+      `SELECT id, occurred_at, server_id, victim_uid, victim_name, killer_type, killer_uid, killer_name,
               weapon_name, distance_m, is_pvp, is_suicide, victim_alive_s
          FROM kills
          ${where}
         ORDER BY occurred_at DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM kills ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM kills ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
@@ -359,28 +629,36 @@ router.get('/shop_events', async (req, res) => {
   const offset = clampOffset(req.query.offset);
   const search = ilikePattern(req.query.search);
   const isPurchase = req.query.is_purchase;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (search) {
-    params.push(search);
-    conds.push(`(player_name ILIKE $${params.length} OR item_name ILIKE $${params.length})`);
+    filterParams.push(search);
+    conds.push(`(player_name ILIKE $${filterParams.length} OR item_name ILIKE $${filterParams.length})`);
   }
   if (isPurchase === 'true') conds.push('is_purchase = true');
   else if (isPurchase === 'false') conds.push('is_purchase = false');
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`server_id = $${filterParams.length}`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
-      `SELECT id, occurred_at, player_uid, player_name, item_name, item_prefab,
+      `SELECT id, occurred_at, server_id, player_uid, player_name, item_name, item_prefab,
               quantity, is_purchase, success, price, balance_after
          FROM shop_events
          ${where}
         ORDER BY occurred_at DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM shop_events ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM shop_events ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
@@ -405,27 +683,35 @@ router.get('/missions', async (req, res) => {
   const offset = clampOffset(req.query.offset);
   const search = ilikePattern(req.query.search);
   const active = req.query.active;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (search) {
-    params.push(search);
-    conds.push(`mission_name ILIKE $${params.length}`);
+    filterParams.push(search);
+    conds.push(`mission_name ILIKE $${filterParams.length}`);
   }
   if (active === 'true') conds.push('ended_at IS NULL');
   else if (active === 'false') conds.push('ended_at IS NOT NULL');
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`server_id = $${filterParams.length}`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
-      `SELECT id, started_at, ended_at, sub_idx, mission_name, won, cooldown_s
+      `SELECT id, server_id, started_at, ended_at, sub_idx, mission_name, won, cooldown_s
          FROM missions
          ${where}
         ORDER BY started_at DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM missions ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM missions ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
@@ -451,17 +737,25 @@ router.get('/events', async (req, res) => {
   const type = req.query.type;
   const processed = req.query.processed;
   const hasError = req.query.has_error;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (type) {
-    params.push(String(type));
-    conds.push(`event_type = $${params.length}`);
+    filterParams.push(String(type));
+    conds.push(`event_type = $${filterParams.length}`);
   }
   if (processed === 'true') conds.push('processed = true');
   else if (processed === 'false') conds.push('processed = false');
   if (hasError === 'true') conds.push('error IS NOT NULL');
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`server_id = $${filterParams.length}`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
@@ -469,10 +763,10 @@ router.get('/events', async (req, res) => {
          FROM events_raw
          ${where}
         ORDER BY received_at DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM events_raw ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM events_raw ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
@@ -513,25 +807,33 @@ router.get('/sessions', async (req, res) => {
   const limit = clampLimit(req.query.limit);
   const offset = clampOffset(req.query.offset);
   const open = req.query.open;
+  const selectedServer = serverFilter(req);
 
   const conds = [];
-  const params = [limit, offset];
+  const filterParams = [];
   if (open === 'true') conds.push('disconnected_at IS NULL');
   else if (open === 'false') conds.push('disconnected_at IS NOT NULL');
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`s.server_id = $${filterParams.length}`);
+  }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
 
   try {
     const rowsR = await db.query(
-      `SELECT s.id, s.player_uid, p.name AS player_name, s.connected_at, s.disconnected_at,
+      `SELECT s.id, s.server_id, s.player_uid, p.name AS player_name, s.connected_at, s.disconnected_at,
               s.duration_s, s.spawn_point, s.balance_in, s.balance_out
          FROM sessions s
          LEFT JOIN players p ON p.uid = s.player_uid
          ${where}
         ORDER BY s.connected_at DESC
-        LIMIT $1 OFFSET $2`,
-      params
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
     );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM sessions s ${where}`, params.slice(2));
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM sessions s ${where}`, filterParams);
     res.json({ total: countR.rows[0].n, rows: rowsR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });

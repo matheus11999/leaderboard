@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db');
+const { serverFilter } = require('../lib/servers');
 
 const router = express.Router();
 
@@ -19,6 +20,8 @@ function intervalFor(period) {
 router.get('/', async (req, res) => {
   const interval = intervalFor(req.query.period);
   const since = interval ? `AND se.occurred_at > NOW() - ${interval}` : '';
+  const selectedServer = serverFilter(req);
+  const serverClause = selectedServer ? 'AND se.server_id = $3' : '';
 
   try {
     async function topPlayers(isPurchase, limit = 10) {
@@ -28,12 +31,12 @@ router.get('/', async (req, res) => {
                 SUM(se.price)::INT AS total,
                 COUNT(*)::INT AS transactions
            FROM shop_events se
-           LEFT JOIN players p ON p.uid = se.player_uid
-          WHERE se.success = true AND se.is_purchase = $1 ${since}
+          LEFT JOIN players p ON p.uid = se.player_uid
+          WHERE se.success = true AND se.is_purchase = $1 ${serverClause} ${since}
           GROUP BY se.player_uid, p.name
           ORDER BY total DESC
           LIMIT $2`,
-        [isPurchase, limit]
+        selectedServer ? [isPurchase, limit, selectedServer] : [isPurchase, limit]
       );
       return r.rows;
     }
@@ -46,11 +49,11 @@ router.get('/', async (req, res) => {
       const r = await db.query(
         `SELECT item_name AS name, SUM(quantity)::INT AS qty
            FROM shop_events se
-          WHERE player_uid = $1 AND is_purchase = $2 AND success = true ${since}
+          WHERE player_uid = $1 AND is_purchase = $2 AND success = true ${serverClause} ${since}
           GROUP BY item_name
           ORDER BY qty DESC
           LIMIT 3`,
-        [uid, isPurchase]
+        selectedServer ? [uid, isPurchase, selectedServer] : [uid, isPurchase]
       );
       return r.rows;
     }

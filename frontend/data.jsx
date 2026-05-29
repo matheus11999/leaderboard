@@ -61,6 +61,8 @@ const BOUNTIES = {
   active: [],
   completed: [],
 };
+const SERVERS = [];
+const SELECTED_SERVER = detectSelectedServer();
 const SERVER_STATS = {
   onlineNow: 0,
   maxPlayers: 80,
@@ -207,6 +209,8 @@ window.GAME_DATA = {
   HIGHLIGHTS,
   SAFEZONE,
   BOUNTIES,
+  SERVERS,
+  SELECTED_SERVER,
   SERVER_STATS,
   formatAlive,
   formatBRL,
@@ -225,12 +229,39 @@ async function getJson(url, opts) {
   return res.json();
 }
 
+function detectSelectedServer() {
+  const params = new URLSearchParams(window.location.search || "");
+  const fromQuery = params.get("server_id") || params.get("server");
+  if (fromQuery) return fromQuery.trim();
+
+  const match = window.location.pathname.match(/^\/server\/([^/]+)/);
+  if (match) return decodeURIComponent(match[1]);
+  return "";
+}
+
+function withServer(url) {
+  if (!SELECTED_SERVER) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}server=${encodeURIComponent(SELECTED_SERVER)}`;
+}
+
+async function fetchServers() {
+  try {
+    const data = await getJson("/api/servers", { cache: "no-store" });
+    SERVERS.length = 0;
+    for (const row of data.rows || []) SERVERS.push(row);
+    window.dispatchEvent(new CustomEvent("gamedata-updated"));
+  } catch (err) {
+    console.warn("[data.jsx] servers refresh failed:", err.message);
+  }
+}
+
 // -------------------------------------------------------------------
 // Kill feed — dedicated 10s refresh, no cache, fires killfeed-updated
 // -------------------------------------------------------------------
 async function fetchKillFeedLive() {
   try {
-    const data = await getJson("/api/killfeed?limit=200", { cache: "no-store" });
+    const data = await getJson(withServer("/api/killfeed?limit=200"), { cache: "no-store" });
     KILL_FEED.length = 0;
     for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
     window.dispatchEvent(new CustomEvent("killfeed-updated"));
@@ -245,11 +276,11 @@ async function fetchKillFeedLive() {
 async function fetchPeriodMode(period, mode) {
   const type = mode === "pvp" ? "pvp_kills" : "pve_kills";
   const [kills, deathsAgg, lifeAgg, longestShot, longestAlive] = await Promise.all([
-    getJson(`/api/leaderboard?type=${type}&period=${period}&limit=${TOP_LIMIT}`),
-    getJson(`/api/leaderboard?type=most_deaths&period=${period}&limit=200`),
-    getJson(`/api/leaderboard?type=longest_life&period=${period}&limit=200`),
-    getJson(`/api/leaderboard?type=longest_shot&period=${period}&limit=1`),
-    getJson(`/api/leaderboard?type=longest_life&period=${period}&limit=1`),
+    getJson(withServer(`/api/leaderboard?type=${type}&period=${period}&limit=${TOP_LIMIT}`)),
+    getJson(withServer(`/api/leaderboard?type=most_deaths&period=${period}&limit=200`)),
+    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=200`)),
+    getJson(withServer(`/api/leaderboard?type=longest_shot&period=${period}&limit=1`)),
+    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=1`)),
   ]);
 
   const deathsByUid = new Map();
@@ -265,7 +296,7 @@ async function fetchPeriodMode(period, mode) {
 }
 
 async function fetchSafezone(period) {
-  const data = await getJson(`/api/safezone?period=${period}`);
+  const data = await getJson(withServer(`/api/safezone?period=${period}`));
   SAFEZONE[period] = {
     seller: mapSafezoneSide(data.seller),
     buyer: mapSafezoneSide(data.buyer),
@@ -276,8 +307,8 @@ async function fetchSafezone(period) {
 
 async function fetchBounties() {
   const [active, completed] = await Promise.all([
-    getJson(`/api/bounties/active?limit=20`),
-    getJson(`/api/bounties/completed?limit=20`),
+    getJson(withServer(`/api/bounties/active?limit=20`)),
+    getJson(withServer(`/api/bounties/completed?limit=20`)),
   ]);
 
   BOUNTIES.active = (active.rows || []).map((r) => ({
@@ -307,7 +338,7 @@ async function fetchBounties() {
 }
 
 async function fetchServerStats() {
-  const data = await getJson(`/api/stats/server`);
+  const data = await getJson(withServer(`/api/stats/server`));
   SERVER_STATS.onlineNow = Number(data.online_now) || 0;
   SERVER_STATS.totalPlayersRegistered = Number(data.total_players_registered) || 0;
   SERVER_STATS.totalKills = Number(data.total_kills) || 0;
@@ -335,5 +366,6 @@ async function refreshAll() {
 fetchKillFeedLive();
 setInterval(fetchKillFeedLive, KILL_FEED_REFRESH_MS);
 
+fetchServers();
 refreshAll();
 setInterval(refreshAll, REFRESH_MS);

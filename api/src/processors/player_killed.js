@@ -1,6 +1,7 @@
 'use strict';
 
 const db = require('../db');
+const { normalizeServerId } = require('../lib/servers');
 
 // Map README killer_type → players column to increment.
 const DEATH_COLUMN = {
@@ -42,7 +43,7 @@ module.exports = async function (data, envelope = {}) {
 
   const killerType = (killer.type || 'environment').toLowerCase();
   const deathCol = DEATH_COLUMN[killerType] || 'deaths_env';
-  const serverId = String(envelope.server_id || data.server_id || 'default');
+  const serverId = normalizeServerId(envelope.server_id || data.server_id);
   const isSuicide = data.is_suicide === true || data.is_suicide === 1 || data.is_suicide === 'true';
   const rankedDeathIncrement = isSuicide ? 0 : 1;
 
@@ -90,19 +91,20 @@ module.exports = async function (data, envelope = {}) {
     // Insert kill row.
     await c.query(
       `INSERT INTO kills (
-         occurred_at, victim_uid, victim_name, victim_position, victim_prefab,
+         occurred_at, server_id, victim_uid, victim_name, victim_position, victim_prefab,
          killer_type, killer_uid, killer_name, killer_prefab,
          weapon_name, weapon_prefab, distance_m,
          is_pvp, is_suicide,
          victim_alive_s, victim_hydration, victim_energy, victim_bleeding
        ) VALUES (
-         NOW(), $1, $2, POINT($3, $4), $5,
-         $6, $7, $8, $9,
-         $10, $11, $12,
-         $13, $14,
-         $15, $16, $17, $18
+         NOW(), $1, $2, $3, POINT($4, $5), $6,
+         $7, $8, $9, $10,
+         $11, $12, $13,
+         $14, $15,
+         $16, $17, $18, $19
        )`,
       [
+        serverId,
         victim.uid,
         victim.name || 'Unknown',
         Number(pos.x) || 0,
@@ -162,6 +164,7 @@ module.exports = async function (data, envelope = {}) {
          bounty_active = false,
          bounty_value = 0,
          bounty_started_at = NULL,
+         bounty_server_id = NULL,
          last_seen      = NOW()
        WHERE uid = $3`,
       [safeAliveSeconds || 0, rankedDeathIncrement, victim.uid]
@@ -188,9 +191,10 @@ module.exports = async function (data, envelope = {}) {
           `UPDATE players SET
              bounty_active = true,
              bounty_value = $1,
-             bounty_started_at = COALESCE(bounty_started_at, NOW())
+             bounty_started_at = COALESCE(bounty_started_at, NOW()),
+             bounty_server_id = $3
            WHERE uid = $2`,
-          [bountyValue, killerUid]
+          [bountyValue, killerUid, serverId]
         );
       }
     }

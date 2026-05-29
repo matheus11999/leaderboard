@@ -18,6 +18,7 @@ const playersRouter     = require('./routes/players');
 const statsRouter       = require('./routes/stats');
 const safezoneRouter    = require('./routes/safezone');
 const adminRouter       = require('./routes/admin');
+const serversRouter     = require('./routes/servers');
 
 const PORT = Number(process.env.PORT) || 3000;
 const VIEW_REFRESH_MS = 60_000;
@@ -54,6 +55,7 @@ async function bootstrap() {
   app.use('/api/players', playersRouter);
   app.use('/api/stats', statsRouter);
   app.use('/api/safezone', safezoneRouter);
+  app.use('/api/servers', serversRouter);
   app.use('/api/admin', adminRouter);
   // Back-compat: keep legacy /admin/* mounted too so old clients/tests
   // (e.g. /admin/health probes) keep working.

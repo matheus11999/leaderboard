@@ -2,26 +2,45 @@
 
 const express = require('express');
 const db = require('../db');
+const { serverFilter } = require('../lib/servers');
 
 const router = express.Router();
 
 // GET /api/stats/server
-router.get('/server', async (_req, res) => {
+router.get('/server', async (req, res) => {
+  const selectedServer = serverFilter(req);
+  const serverWhere = selectedServer ? 'WHERE server_id = $1' : '';
+  const serverAnd = selectedServer ? 'AND server_id = $1' : '';
+  const params = selectedServer ? [selectedServer] : [];
   try {
     const online = await db.query(
-      `SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL`
+      `SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL ${serverAnd}`,
+      params
     );
-    const totalPlayers = await db.query(`SELECT COUNT(*)::INT AS n FROM players`);
-    const totalKills = await db.query(`SELECT COUNT(*)::INT AS n FROM kills`);
-    const totalPvP = await db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true`);
+    const totalPlayers = await db.query(
+      selectedServer
+        ? `SELECT COUNT(DISTINCT player_uid)::INT AS n FROM sessions WHERE server_id = $1`
+        : `SELECT COUNT(*)::INT AS n FROM players`,
+      params
+    );
+    const totalKills = await db.query(`SELECT COUNT(*)::INT AS n FROM kills ${serverWhere}`, params);
+    const totalPvP = await db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true ${serverAnd}`, params);
     const activeMissions = await db.query(
-      `SELECT COUNT(*)::INT AS n FROM missions WHERE ended_at IS NULL`
+      `SELECT COUNT(*)::INT AS n FROM missions WHERE ended_at IS NULL ${serverAnd}`,
+      params
     );
     const last24h = await db.query(
-      `SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours'`
+      `SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours' ${serverAnd}`,
+      params
     );
     const activeBounties = await db.query(
-      `SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`
+      selectedServer
+        ? `SELECT COUNT(*)::INT AS n
+             FROM players p
+            WHERE p.bounty_active = true
+              AND (p.bounty_server_id = $1 OR (p.bounty_server_id IS NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = p.uid AND s.server_id = $1)))`
+        : `SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`,
+      params
     );
 
     res.json({

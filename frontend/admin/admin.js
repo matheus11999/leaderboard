@@ -7,12 +7,13 @@
 // ===================================================================
 
 const API_BASE = '/api/admin';
+const DEFAULT_SERVER_ID = 'brasilz-main';
 
 const state = {
   user: null,
   current: 'overview',
   servers: [],
-  selectedServer: '',
+  selectedServer: DEFAULT_SERVER_ID,
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
@@ -53,7 +54,6 @@ async function api(method, path, body) {
 }
 
 function withServer(path) {
-  if (!state.selectedServer) return path;
   const sep = path.includes('?') ? '&' : '?';
   return path + sep + 'server_id=' + encodeURIComponent(state.selectedServer);
 }
@@ -335,6 +335,7 @@ async function saveBountySettings() {
 async function loadServers() {
   const d = await api('GET', '/servers');
   state.servers = d.rows || [];
+  ensureSelectedServer();
   renderServerSelects();
   renderTable('servers-table', [
     { key: 'id', label: 'ID' },
@@ -350,22 +351,44 @@ async function loadServers() {
 }
 
 function renderServerSelects() {
-  const options = [
-    '<option value="">Todos servidores</option>',
-    ...state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`),
-  ].join('');
   const filter = document.getElementById('admin-server-filter');
   if (filter) {
-    filter.innerHTML = options;
-    filter.value = state.selectedServer;
+    filter.innerHTML = state.servers.map((s) => {
+      const active = s.id === state.selectedServer;
+      return `<button type="button" role="tab" aria-selected="${active ? 'true' : 'false'}" class="server-switch-btn ${active ? 'is-active' : ''}" data-server-id="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</button>`;
+    }).join('');
+
+    for (const btn of filter.querySelectorAll('.server-switch-btn')) {
+      btn.addEventListener('click', () => {
+        const next = btn.dataset.serverId || DEFAULT_SERVER_ID;
+        if (next === state.selectedServer) return;
+        state.selectedServer = next;
+        for (const pager of Object.values(state.pagers)) pager.offset = 0;
+        renderServerSelects();
+        refreshTab(state.current);
+      });
+    }
   }
 
   const payment = document.getElementById('payments-server');
   if (payment) {
     const paymentOptions = state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`).join('');
-    payment.innerHTML = paymentOptions || '<option value="brasilz-main">brasilz-main</option>';
-    if (state.selectedServer) payment.value = state.selectedServer;
+    payment.innerHTML = paymentOptions || `<option value="${DEFAULT_SERVER_ID}">${DEFAULT_SERVER_ID}</option>`;
+    payment.value = state.selectedServer;
   }
+}
+
+function ensureSelectedServer() {
+  if (!state.servers.length) {
+    state.selectedServer = state.selectedServer || DEFAULT_SERVER_ID;
+    return;
+  }
+
+  if (state.servers.some((s) => s.id === state.selectedServer)) return;
+
+  const main = state.servers.find((s) => s.id === DEFAULT_SERVER_ID);
+  const def = state.servers.find((s) => s.is_default);
+  state.selectedServer = (main || def || state.servers[0]).id;
 }
 
 function fillServerForm(row) {
@@ -433,7 +456,7 @@ async function createPayment() {
   const status = document.getElementById('payments-status');
   const playerUid = document.getElementById('payments-player').value;
   const amount = Number(document.getElementById('payments-amount').value);
-  const serverId = document.getElementById('payments-server').value.trim() || state.selectedServer || 'brasilz-main';
+  const serverId = document.getElementById('payments-server').value.trim() || state.selectedServer || DEFAULT_SERVER_ID;
   const note = document.getElementById('payments-note').value.trim();
 
   if (!playerUid) {
@@ -692,12 +715,6 @@ function bindUI() {
   document.getElementById('login-form').addEventListener('submit', doLogin);
   document.getElementById('btn-logout').addEventListener('click', doLogout);
   document.getElementById('modal-cancel').addEventListener('click', hideModal);
-  document.getElementById('admin-server-filter').addEventListener('change', (ev) => {
-    state.selectedServer = ev.target.value;
-    for (const pager of Object.values(state.pagers)) pager.offset = 0;
-    renderServerSelects();
-    refreshTab(state.current);
-  });
   for (const btn of document.querySelectorAll('.tab')) {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   }

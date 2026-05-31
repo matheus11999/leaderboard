@@ -18,7 +18,7 @@ function slugifyServerId(raw) {
 function serverFilter(req) {
   const raw = req.query.server_id || req.query.server || req.query.slug;
   const value = String(raw || '').trim();
-  return value || null;
+  return value || DEFAULT_SERVER_ID;
 }
 
 async function ensureServer(dbOrClient, rawId, name) {

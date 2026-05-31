@@ -245,17 +245,37 @@ button { font-family: inherit; cursor: pointer; }
   flex-wrap: wrap;
 }
 
-.hero-u-server-select {
-  height: 38px;
-  min-width: 180px;
+.hero-u-server-switch {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  max-width: min(560px, calc(100vw - 56px));
+  padding: 3px;
   border: 1px solid rgba(222, 196, 137, 0.35);
   background: rgba(11, 14, 13, 0.82);
-  color: #f1e6cf;
-  padding: 0 12px;
+  overflow-x: auto;
+}
+.hero-u-server-btn {
+  min-height: 32px;
+  min-width: 96px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
   font-family: "Barlow Condensed", sans-serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.hero-u-server-btn.is-active {
+  background: var(--primary);
+  color: #120d08;
+}
+.hero-u-server-btn:not(.is-active):hover {
+  color: #f1e6cf;
+  background: rgba(255,255,255,0.06);
 }
 .hu2-period-group, .hu2-mode-group {
   display: flex;

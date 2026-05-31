@@ -21,6 +21,7 @@ const MODES = ["pvp", "pve"];
 const TOP_LIMIT = 20;
 const REFRESH_MS = 30_000;
 const KILL_FEED_REFRESH_MS = 10_000;
+const DEFAULT_SERVER_ID = "brasilz-main";
 
 // -------------------------------------------------------------------
 // Formatting helpers (kept identical to the original mock data.jsx so
@@ -236,11 +237,10 @@ function detectSelectedServer() {
 
   const match = window.location.pathname.match(/^\/server\/([^/]+)/);
   if (match) return decodeURIComponent(match[1]);
-  return "";
+  return DEFAULT_SERVER_ID;
 }
 
 function withServer(url) {
-  if (!SELECTED_SERVER) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}server=${encodeURIComponent(SELECTED_SERVER)}`;
 }

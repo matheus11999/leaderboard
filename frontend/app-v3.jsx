@@ -157,19 +157,25 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
         {servers.length > 1 && (
           <div className="hu2-mode-group">
             <span className="hu2-ctrl-label">SERVIDOR</span>
-            <select
-              className="hero-u-server-select"
-              value={selectedServer}
-              onChange={(ev) => {
-                const serverId = ev.target.value;
-                window.location.href = serverId ? `/server/${encodeURIComponent(serverId)}` : "/";
-              }}
-            >
-              <option value="">Todos</option>
-              {servers.map((s) => (
-                <option key={s.id} value={s.id}>{s.name || s.id}</option>
-              ))}
-            </select>
+            <div className="hero-u-server-switch" role="tablist" aria-label="Servidor">
+              {servers.map((s) => {
+                const active = selectedServer === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    className={`hero-u-server-btn ${active ? "is-active" : ""}`}
+                    onClick={() => {
+                      if (!active) window.location.href = `/server/${encodeURIComponent(s.id)}`;
+                    }}
+                  >
+                    {s.name || s.id}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

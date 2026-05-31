@@ -349,17 +349,19 @@ async function fetchServerStats() {
 }
 
 async function refreshAll() {
-  try {
-    await Promise.all([
-      ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
-      ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p)),
-      fetchBounties(),
-      fetchServerStats(),
-    ]);
-    window.dispatchEvent(new CustomEvent("gamedata-updated"));
-  } catch (err) {
-    console.warn("[data.jsx] refresh failed:", err.message);
+  const tasks = [
+    ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
+    ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p)),
+    fetchBounties(),
+    fetchServerStats(),
+  ];
+
+  const results = await Promise.allSettled(tasks);
+  const failed = results.filter((r) => r.status === "rejected");
+  if (failed.length) {
+    console.warn("[data.jsx] partial refresh failed:", failed.map((r) => r.reason?.message || r.reason).join(" | "));
   }
+  window.dispatchEvent(new CustomEvent("gamedata-updated"));
 }
 
 // Boot

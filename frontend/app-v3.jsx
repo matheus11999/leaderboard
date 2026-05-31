@@ -47,7 +47,8 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
   const servers = window.GAME_DATA.SERVERS || [];
   const selectedServer = window.GAME_DATA.SELECTED_SERVER || "";
   const clock  = useClock();
-  const top3   = players.slice(0, 3);
+  const safePlayers = Array.isArray(players) ? players : [];
+  const top3   = safePlayers.slice(0, 3);
 
   const timeStr = clock.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
   const dateStr = clock.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).toUpperCase().replace(".", "");
@@ -197,9 +198,11 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
 // ===================================================================
 function PodiumPlace({ place, player }) {
   const labels = { 1: "01", 2: "02", 3: "03" };
+  const safePlayer = player || { nick: "AGUARDANDO KILLS", kills: 0, empty: true };
+  const empty = safePlayer.empty || safePlayer.nick === "—" || safePlayer.nick === "-";
 
   return (
-    <article className={`pc place-${place}`}>
+    <article className={`pc place-${place} ${empty ? "is-empty" : ""}`}>
       {place === 1 && <span className="pc-crown" aria-hidden="true"><CrownSvg /></span>}
       <span className="pc-glow" aria-hidden="true" />
       <span className="pc-medal-ring" aria-hidden="true" />
@@ -208,9 +211,9 @@ function PodiumPlace({ place, player }) {
         <span className="pc-rank-num">{labels[place]}</span>
       </div>
       <div className="pc-body">
-        <h3 className="pc-nick">{player.nick}</h3>
+        <h3 className="pc-nick">{safePlayer.nick || "AGUARDANDO KILLS"}</h3>
         <div className="pc-kills">
-          <span className="pc-kills-num">{player.kills}</span>
+          <span className="pc-kills-num">{Number(safePlayer.kills) || 0}</span>
           <span className="pc-kills-lbl">KILLS</span>
         </div>
         <div className="pc-pedestal" aria-hidden="true"><span /></div>
@@ -220,8 +223,9 @@ function PodiumPlace({ place, player }) {
 }
 
 function Podium({ players }) {
-  const [first, second, third] = players;
-  const empty = { nick: "—", kills: 0 };
+  const safePlayers = Array.isArray(players) ? players : [];
+  const [first, second, third] = safePlayers;
+  const empty = { nick: "AGUARDANDO KILLS", kills: 0, empty: true };
   return (
     <div className="pc-row">
       <PodiumPlace place={1} player={first  || empty} />
@@ -360,11 +364,9 @@ function formatHuntDuration(seconds) {
 function HuntCard({ bounties }) {
   const { formatBRL } = window.GAME_DATA;
   const [showHunts, setShowHunts] = useState(false);
-  const active = bounties?.active || [];
-  const completed = bounties?.completed || [];
+  const active = Array.isArray(bounties?.active) ? bounties.active : [];
+  const completed = Array.isArray(bounties?.completed) ? bounties.completed : [];
   const sortedActive = [...active].sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
-
-  if (active.length === 0 && completed.length === 0) return null;
 
   const main = sortedActive[0] || null;
   const isActive = Boolean(main);
@@ -531,6 +533,7 @@ function HuntCard({ bounties }) {
 // ===================================================================
 function SafezoneCard({ kind, data }) {
   const { formatBRL } = window.GAME_DATA;
+  const safeData = data || { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] };
   const isSeller = kind === "seller";
   const title    = isSeller ? "MAIOR VENDEDOR" : "MAIOR COMPRADOR";
   const eyebrow  = isSeller ? "SAFEZONE · COMÉRCIO" : "SAFEZONE · CONSUMO";
@@ -549,15 +552,15 @@ function SafezoneCard({ kind, data }) {
       <div className="sz-player">
         <div className="sz-player-l">
           <div className="ls-player-pre"><span className="ls-player-pre-line" /><span>{verb}</span></div>
-          <h4 className="ls-player-nick">{data.nick}</h4>
+          <h4 className="ls-player-nick">{safeData.nick || "—"}</h4>
           <div className="sz-player-meta">
             <span>SAFEZONE</span>
             <span className="sz-player-sep" />
-            <span>{data.transactions} {txLbl}</span>
+            <span>{Number(safeData.transactions) || 0} {txLbl}</span>
           </div>
         </div>
       </div>
-      <div className="sz-vault" aria-label={formatBRL(data.total)}>
+      <div className="sz-vault" aria-label={formatBRL(safeData.total)}>
         <div className="sz-vault-bg" aria-hidden="true">
           <svg viewBox="0 0 200 80" width="100%" height="100%" preserveAspectRatio="none">
             <defs>
@@ -576,7 +579,7 @@ function SafezoneCard({ kind, data }) {
         <div className="sz-vault-display">
           <span className="sz-vault-currency">R$</span>
           <span className="sz-vault-num">
-            {(data.total || 0).toLocaleString("pt-BR")}
+            {(Number(safeData.total) || 0).toLocaleString("pt-BR")}
             <span className="sz-vault-cents">,00</span>
           </span>
         </div>
@@ -587,6 +590,12 @@ function SafezoneCard({ kind, data }) {
 
 function SafezoneSection({ data, period }) {
   const periodLabel = (UI_PERIODS.find((p) => p.id === period) || UI_PERIODS[0]).label;
+  const safeData = data || {
+    seller: { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] },
+    buyer: { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] },
+    sellers: [],
+    buyers: [],
+  };
   return (
     <section className="sz-section" data-screen-label="Safezone">
       <header className="sz-section-head">
@@ -598,8 +607,8 @@ function SafezoneSection({ data, period }) {
         <span className="sz-section-badge">{periodLabel}</span>
       </header>
       <div className="sz-grid">
-        <SafezoneCard kind="seller" data={data.seller} />
-        <SafezoneCard kind="buyer"  data={data.buyer}  />
+        <SafezoneCard kind="seller" data={safeData.seller} />
+        <SafezoneCard kind="buyer"  data={safeData.buyer}  />
       </div>
     </section>
   );
@@ -616,19 +625,23 @@ function RankTable({ period, dataTick }) {
   const isAlive = filter === "alive";
 
   const rows = useMemo(() => {
-    if (filter === "pvp") return RANKINGS[period].pvp.slice(0, 10);
-    if (filter === "pve") return RANKINGS[period].pve.slice(0, 10);
+    const periodRankings = RANKINGS?.[period] || { pvp: [], pve: [] };
+    const pvpRows = Array.isArray(periodRankings.pvp) ? periodRankings.pvp : [];
+    const pveRows = Array.isArray(periodRankings.pve) ? periodRankings.pve : [];
+
+    if (filter === "pvp") return pvpRows.slice(0, 10);
+    if (filter === "pve") return pveRows.slice(0, 10);
     if (filter === "alive") {
-      return [...RANKINGS[period].pvp]
-        .sort((a, b) => b.aliveMin - a.aliveMin)
+      return [...pvpRows]
+        .sort((a, b) => (Number(b.aliveMin) || 0) - (Number(a.aliveMin) || 0))
         .slice(0, 10)
         .map((p, i) => ({ ...p, rank: i + 1 }));
     }
     if (filter === "vendedor" || filter === "comprador") {
       const kind = filter === "vendedor" ? "seller" : "buyer";
       const listKey = filter === "vendedor" ? "sellers" : "buyers";
-      const sz   = SAFEZONE[period];
-      const list = sz[listKey] || [];
+      const sz   = SAFEZONE?.[period] || {};
+      const list = Array.isArray(sz[listKey]) ? sz[listKey] : [];
       if (list.length) return list.slice(0, 10);
       const seed = sz[kind];
       if (!seed || seed.nick === "—" || seed.nick === "-" || !seed.total) return [];
@@ -640,7 +653,7 @@ function RankTable({ period, dataTick }) {
         transactions: seed.transactions || 0,
       }];
     }
-    return RANKINGS[period].pvp.slice(0, 10);
+    return pvpRows.slice(0, 10);
   }, [filter, period, dataTick]);
 
   const filterTitle = {
@@ -735,9 +748,22 @@ function App() {
     return () => window.removeEventListener("gamedata-updated", h);
   }, []);
 
-  const players    = window.GAME_DATA.RANKINGS[period][mode];
-  const highlights = window.GAME_DATA.HIGHLIGHTS[period][mode];
-  const safezone   = window.GAME_DATA.SAFEZONE[period];
+  const rankingsByPeriod = window.GAME_DATA.RANKINGS?.[period] || { pvp: [], pve: [] };
+  const highlightsByPeriod = window.GAME_DATA.HIGHLIGHTS?.[period] || {};
+  const emptyHighlight = {
+    longestShot: { nick: "—", region: "—", dist: 0, weapon: "—", location: "—" },
+    longestAlive: { nick: "—", region: "—", aliveMin: 0, location: "—" },
+  };
+  const emptySafezone = {
+    seller: { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] },
+    buyer: { uid: null, nick: "—", total: 0, transactions: 0, topItems: [] },
+    sellers: [],
+    buyers: [],
+  };
+
+  const players    = Array.isArray(rankingsByPeriod[mode]) ? rankingsByPeriod[mode] : [];
+  const highlights = highlightsByPeriod[mode] || emptyHighlight;
+  const safezone   = window.GAME_DATA.SAFEZONE?.[period] || emptySafezone;
   const bounties   = window.GAME_DATA.BOUNTIES || { active: [], completed: [] };
 
   return (

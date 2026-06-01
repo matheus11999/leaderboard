@@ -242,7 +242,9 @@ async function loadSessions() {
     renderTable('sessions-table', [
       { key: 'connected_at', label: 'INÍCIO', render: v => fmtDate(v) },
       { key: 'server_id', label: 'SERVER' },
-      { key: 'disconnected_at', label: 'FIM', render: v => v ? fmtDate(v) : '<span class="pill is-ok">ABERTA</span>' },
+      { key: 'online', label: 'STATUS', render: v => v ? '<span class="pill is-ok">ONLINE</span>' : '<span class="pill">OFFLINE</span>' },
+      { key: 'disconnected_at', label: 'FIM', render: v => v ? fmtDate(v) : '<span class="pill is-warn">SEM DISCONNECT</span>' },
+      { key: 'last_seen', label: 'ATIVIDADE', render: v => fmtDate(v) },
       { key: 'player_name', label: 'JOGADOR', render: (v, r) => v || r.player_uid || '—' },
       { key: 'duration_s', label: 'DURAÇÃO', render: v => fmtSeconds(v) },
       { key: 'spawn_point', label: 'SPAWN', render: v => v || '—' },
@@ -429,22 +431,27 @@ async function saveServer() {
 async function loadPaymentPlayers() {
   const select = document.getElementById('payments-player');
   const search = document.getElementById('payments-player-search').value.trim();
+  const serverId = document.getElementById('payments-server')?.value || state.selectedServer || DEFAULT_SERVER_ID;
   const q = new URLSearchParams({ limit: 200 });
   if (search) q.set('search', search);
+  q.set('server_id', serverId);
 
   select.innerHTML = '<option value="">Carregando...</option>';
+  select.dataset.serverId = serverId;
   try {
-    const d = await api('GET', withServer('/payments/players?' + q));
+    const d = await api('GET', '/payments/players?' + q);
     const rows = d.rows || [];
     if (!rows.length) {
-      select.innerHTML = '<option value="">Nenhum jogador encontrado</option>';
+      select.innerHTML = '<option value="">Nenhum jogador encontrado neste servidor</option>';
       return;
     }
     select.innerHTML = rows.map((p) => {
       const name = escapeHtml(p.name || 'Unknown');
       const uid = escapeHtml(p.uid || '');
-      const seen = p.last_seen ? fmtDate(p.last_seen) : 'sem data';
-      return `<option value="${uid}">${name} | ${uid.slice(0, 8)} | ${seen}</option>`;
+      const seen = (p.session_last_seen || p.last_seen) ? fmtDate(p.session_last_seen || p.last_seen) : 'sem data';
+      const status = p.online ? 'ONLINE' : 'OFFLINE';
+      const balance = p.current_balance != null ? ' | ' + formatBRL(p.current_balance) : '';
+      return `<option value="${uid}">${name} | ${status} | ${uid.slice(0, 8)} | ${seen}${balance}</option>`;
     }).join('');
   } catch (err) {
     select.innerHTML = '<option value="">Erro ao carregar jogadores</option>';
@@ -496,7 +503,9 @@ async function loadPayments() {
   if (search) q.set('search', search);
 
   try {
-    if (!document.getElementById('payments-player').options.length) {
+    const playerSelect = document.getElementById('payments-player');
+    const paymentServer = document.getElementById('payments-server')?.value || state.selectedServer || DEFAULT_SERVER_ID;
+    if (!playerSelect.options.length || playerSelect.dataset.serverId !== paymentServer) {
       await loadPaymentPlayers();
     }
     const d = await api('GET', withServer('/payments?' + q));
@@ -735,6 +744,11 @@ function bindUI() {
   document.getElementById('bounty-save').addEventListener('click', saveBountySettings);
   document.getElementById('payments-player-refresh').addEventListener('click', loadPaymentPlayers);
   document.getElementById('payments-player-search').addEventListener('change', loadPaymentPlayers);
+  document.getElementById('payments-server').addEventListener('change', () => {
+    state.pagers.payments.offset = 0;
+    loadPaymentPlayers();
+    loadPayments();
+  });
   document.getElementById('payments-create').addEventListener('click', createPayment);
   document.getElementById('events-purge').addEventListener('click', purgeOldEvents);
 }

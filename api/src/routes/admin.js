@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAdmin, login } = require('../auth');
 const { normalizeServerId, slugifyServerId, serverFilter, ensureServer } = require('../lib/servers');
+const { onlineGraceSeconds, onlineSql } = require('../lib/online');
 
 const router = express.Router();
 
@@ -174,6 +175,9 @@ router.get('/overview', async (req, res) => {
     const p = selectedServer ? [selectedServer] : [];
     const where = selectedServer ? 'WHERE server_id = $1' : '';
     const and = selectedServer ? 'AND server_id = $1' : '';
+    const onlineSeconds = onlineGraceSeconds();
+    const openParams = selectedServer ? [onlineSeconds, selectedServer] : [onlineSeconds];
+    const openAnd = selectedServer ? 'AND server_id = $2' : '';
     const [
       players, sessions, openSessions, kills, killsPvp, killsLast24,
       shopRows, shopVolume, missions, missionsActive,
@@ -181,7 +185,7 @@ router.get('/overview', async (req, res) => {
     ] = await Promise.all([
       db.query(selectedServer ? `SELECT COUNT(DISTINCT player_uid)::INT AS n FROM sessions WHERE server_id = $1` : `SELECT COUNT(*)::INT AS n FROM players`, p),
       db.query(`SELECT COUNT(*)::INT AS n FROM sessions ${where}`, p),
-      db.query(`SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL ${and}`, p),
+      db.query(`SELECT COUNT(*)::INT AS n FROM sessions s WHERE ${onlineSql('s', '$1')} ${openAnd}`, openParams),
       db.query(`SELECT COUNT(*)::INT AS n FROM kills ${where}`, p),
       db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE is_pvp = true ${and}`, p),
       db.query(`SELECT COUNT(*)::INT AS n FROM kills WHERE occurred_at > NOW() - INTERVAL '24 hours' ${and}`, p),
@@ -212,6 +216,7 @@ router.get('/overview', async (req, res) => {
       events_raw_last_24h: eventsLast24.rows[0].n,
       bounties_active: bountiesActive.rows[0].n,
       bounties_pending: bountiesPending.rows[0].n,
+      online_grace_seconds: onlineSeconds,
       uptime_s: Math.floor(process.uptime()),
     });
   } catch (err) {
@@ -309,28 +314,45 @@ router.get('/payments/players', async (req, res) => {
   const limit = clampLimit(req.query.limit, 100, 300);
   const search = ilikePattern(req.query.search);
   const selectedServer = serverFilter(req);
-  const params = [limit];
+  const onlineSeconds = onlineGraceSeconds();
+  const params = [limit, onlineSeconds];
   const conds = [];
   if (search) {
     params.push(search);
-    conds.push(`(name ILIKE $${params.length} OR uid ILIKE $${params.length})`);
+    conds.push(`(p.name ILIKE $${params.length} OR p.uid ILIKE $${params.length})`);
   }
+
+  let latestSessionFilter = '';
   if (selectedServer) {
     params.push(selectedServer);
-    conds.push(`EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = players.uid AND s.server_id = $${params.length})`);
+    latestSessionFilter = `AND s.server_id = $${params.length}`;
+    conds.push('ps.id IS NOT NULL');
   }
   const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
 
   try {
     const r = await db.query(
-      `SELECT uid, name, last_seen, current_balance
-         FROM players
+      `SELECT p.uid, p.name, p.last_seen, p.current_balance,
+              ps.server_id,
+              COALESCE(ps.last_seen, ps.connected_at) AS session_last_seen,
+              (${onlineSql('ps', '$2')}) AS online
+         FROM players p
+         LEFT JOIN LATERAL (
+           SELECT s.id, s.server_id, s.connected_at, s.disconnected_at, s.last_seen
+             FROM sessions s
+            WHERE s.player_uid = p.uid
+              ${latestSessionFilter}
+            ORDER BY COALESCE(s.last_seen, s.disconnected_at, s.connected_at) DESC
+            LIMIT 1
+         ) ps ON true
          ${where}
-        ORDER BY last_seen DESC NULLS LAST, name ASC
+        ORDER BY online DESC,
+                 COALESCE(ps.last_seen, p.last_seen) DESC NULLS LAST,
+                 p.name ASC
         LIMIT $1`,
       params
     );
-    res.json({ rows: r.rows });
+    res.json({ rows: r.rows, online_grace_seconds: onlineSeconds });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
   }
@@ -808,11 +830,12 @@ router.get('/sessions', async (req, res) => {
   const offset = clampOffset(req.query.offset);
   const open = req.query.open;
   const selectedServer = serverFilter(req);
+  const onlineSeconds = onlineGraceSeconds();
 
-  const conds = [];
-  const filterParams = [];
-  if (open === 'true') conds.push('disconnected_at IS NULL');
-  else if (open === 'false') conds.push('disconnected_at IS NOT NULL');
+  const conds = ['($1::INT IS NOT NULL)'];
+  const filterParams = [onlineSeconds];
+  if (open === 'true') conds.push(`(${onlineSql('s', '$1')})`);
+  else if (open === 'false') conds.push(`NOT (${onlineSql('s', '$1')})`);
   if (selectedServer) {
     filterParams.push(selectedServer);
     conds.push(`s.server_id = $${filterParams.length}`);
@@ -825,16 +848,17 @@ router.get('/sessions', async (req, res) => {
   try {
     const rowsR = await db.query(
       `SELECT s.id, s.server_id, s.player_uid, p.name AS player_name, s.connected_at, s.disconnected_at,
+              s.last_seen, (${onlineSql('s', '$1')}) AS online,
               s.duration_s, s.spawn_point, s.balance_in, s.balance_out
          FROM sessions s
          LEFT JOIN players p ON p.uid = s.player_uid
          ${where}
-        ORDER BY s.connected_at DESC
+        ORDER BY COALESCE(s.last_seen, s.connected_at) DESC
         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
       rowsParams
     );
     const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM sessions s ${where}`, filterParams);
-    res.json({ total: countR.rows[0].n, rows: rowsR.rows });
+    res.json({ total: countR.rows[0].n, rows: rowsR.rows, online_grace_seconds: onlineSeconds });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
   }

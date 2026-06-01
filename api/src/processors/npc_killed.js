@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const { normalizeServerId } = require('../lib/servers');
+const { touchOpenSession } = require('../lib/sessionActivity');
 
 module.exports = async function (data, envelope = {}) {
   const killer = data?.killer?.player || data?.killer;
@@ -48,5 +49,7 @@ module.exports = async function (data, envelope = {}) {
         safeDistanceM,
       ]
     );
+
+    await touchOpenSession(c, { serverId, playerUid: killer.uid });
   });
 };

@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const { normalizeServerId } = require('../lib/servers');
+const { touchOpenSession } = require('../lib/sessionActivity');
 
 const SHOP_EVENT_EXCLUDED_PREFABS = new Set([
   '{BEA6BE0F1ACA4BAE}Prefabs/Items/Gems/Amethyst/Amethyst.et',
@@ -62,5 +63,11 @@ module.exports = async function (data, envelope = {}) {
         [balance.total, player.uid]
       );
     }
+
+    await touchOpenSession(c, {
+      serverId,
+      playerUid: player.uid,
+      balance: Number.isFinite(balance.total) ? balance.total : null,
+    });
   });
 };

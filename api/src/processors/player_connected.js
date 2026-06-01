@@ -30,6 +30,7 @@ module.exports = async function (data, envelope = {}) {
     await c.query(
       `UPDATE sessions
          SET disconnected_at = NOW(),
+             last_seen       = NOW(),
              duration_s      = COALESCE(duration_s, EXTRACT(EPOCH FROM (NOW() - connected_at))::INT)
        WHERE player_uid = $1 AND server_id = $2 AND disconnected_at IS NULL`,
       [player.uid, serverId]
@@ -37,8 +38,8 @@ module.exports = async function (data, envelope = {}) {
 
     // Open new session.
     await c.query(
-      `INSERT INTO sessions (server_id, player_uid, connected_at, balance_in)
-       VALUES ($1, $2, NOW(), $3)`,
+      `INSERT INTO sessions (server_id, player_uid, connected_at, last_seen, balance_in, balance_out)
+       VALUES ($1, $2, NOW(), NOW(), $3, $3)`,
       [serverId, player.uid, balance.total ?? null]
     );
   });

@@ -18,6 +18,7 @@ module.exports = async function (data, envelope = {}) {
     const r = await c.query(
       `UPDATE sessions
          SET disconnected_at = NOW(),
+             last_seen       = NOW(),
              duration_s      = EXTRACT(EPOCH FROM (NOW() - connected_at))::INT,
              balance_out     = $2
        WHERE id = (

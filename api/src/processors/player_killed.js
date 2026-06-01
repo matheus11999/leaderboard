@@ -2,6 +2,7 @@
 
 const db = require('../db');
 const { normalizeServerId } = require('../lib/servers');
+const { touchOpenSession } = require('../lib/sessionActivity');
 
 // Map README killer_type → players column to increment.
 const DEATH_COLUMN = {
@@ -182,6 +183,7 @@ module.exports = async function (data, envelope = {}) {
        WHERE uid = $3`,
       [effectiveAliveSeconds || 0, rankedDeathIncrement, victim.uid]
     );
+    await touchOpenSession(c, { serverId, playerUid: victim.uid });
 
     // Bump killer counters if a player killed another player (not suicide).
     if (killerUid && !isSuicide && data.is_pvp) {
@@ -210,6 +212,10 @@ module.exports = async function (data, envelope = {}) {
           [bountyValue, killerUid, serverId]
         );
       }
+    }
+
+    if (killerUid) {
+      await touchOpenSession(c, { serverId, playerUid: killerUid });
     }
   });
 };

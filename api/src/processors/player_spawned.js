@@ -40,14 +40,16 @@ module.exports = async function (data, envelope = {}) {
     await c.query(
       `UPDATE sessions
          SET spawn_point  = COALESCE($2, spawn_point),
-             spawn_prefab = COALESCE($3, spawn_prefab)
+             spawn_prefab = COALESCE($3, spawn_prefab),
+             last_seen = NOW(),
+             balance_out = COALESCE($5, balance_out)
        WHERE id = (
          SELECT id FROM sessions
           WHERE player_uid = $1 AND server_id = $4
           ORDER BY (disconnected_at IS NULL) DESC, connected_at DESC
           LIMIT 1
        )`,
-      [player.uid, data.spawn_point || null, data.prefab || null, serverId]
+      [player.uid, data.spawn_point || null, data.prefab || null, serverId, balance.total ?? null]
     );
   });
 };

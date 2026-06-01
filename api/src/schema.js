@@ -18,6 +18,8 @@ async function ensureSchema() {
        VALUES ('brasilz-main', 'BrasilZ Main', 'brasilz-main', true, true)
        ON CONFLICT (id) DO NOTHING`,
     `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
+    `ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ`,
+    `UPDATE sessions SET last_seen = COALESCE(last_seen, disconnected_at, connected_at) WHERE last_seen IS NULL`,
     `ALTER TABLE kills ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
     `ALTER TABLE shop_events ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
     `ALTER TABLE missions ADD COLUMN IF NOT EXISTS server_id TEXT NOT NULL DEFAULT 'brasilz-main'`,
@@ -101,6 +103,7 @@ async function ensureSchema() {
     `CREATE INDEX IF NOT EXISTS idx_servers_public ON servers (public_enabled, is_default DESC, name ASC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_server_open ON sessions (server_id, connected_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_server_open_now ON sessions (server_id) WHERE disconnected_at IS NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_sessions_server_last_seen ON sessions (server_id, last_seen DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_kills_server_occurred_at ON kills (server_id, occurred_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_kills_server_pvp ON kills (server_id, is_pvp, occurred_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_shop_events_server_occurred_at ON shop_events (server_id, occurred_at DESC)`,

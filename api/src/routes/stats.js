@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const { serverFilter } = require('../lib/servers');
+const { onlineGraceSeconds, onlineSql } = require('../lib/online');
 
 const router = express.Router();
 
@@ -12,10 +13,13 @@ router.get('/server', async (req, res) => {
   const serverWhere = selectedServer ? 'WHERE server_id = $1' : '';
   const serverAnd = selectedServer ? 'AND server_id = $1' : '';
   const params = selectedServer ? [selectedServer] : [];
+  const onlineSeconds = onlineGraceSeconds();
+  const onlineParams = selectedServer ? [onlineSeconds, selectedServer] : [onlineSeconds];
+  const onlineServerAnd = selectedServer ? 'AND server_id = $2' : '';
   try {
     const online = await db.query(
-      `SELECT COUNT(*)::INT AS n FROM sessions WHERE disconnected_at IS NULL ${serverAnd}`,
-      params
+      `SELECT COUNT(*)::INT AS n FROM sessions s WHERE ${onlineSql('s', '$1')} ${onlineServerAnd}`,
+      onlineParams
     );
     const totalPlayers = await db.query(
       selectedServer
@@ -51,6 +55,7 @@ router.get('/server', async (req, res) => {
       active_missions: activeMissions.rows[0].n,
       kills_last_24h: last24h.rows[0].n,
       active_bounties: activeBounties.rows[0].n,
+      online_grace_seconds: onlineSeconds,
     });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });

@@ -4,6 +4,7 @@
 //
 // window.GAME_DATA exposes the same shape the app expects:
 //   - RANKINGS[period][mode]    → array of player rows
+//   - RANKINGS[period].hunters  → top bounty hunters
 //   - HIGHLIGHTS[period][mode]  → { longestShot, longestAlive }
 //   - SAFEZONE[period]          → { seller, buyer }
 //   - BOUNTIES                  → { active: [], completed: [] }
@@ -75,7 +76,7 @@ const SERVER_STATS = {
   activeBounties: 0,
 };
 for (const p of DATA_PERIOD_IDS) {
-  RANKINGS[p] = { pvp: [], pve: [] };
+  RANKINGS[p] = { pvp: [], pve: [], hunters: [] };
   HIGHLIGHTS[p] = {
     pvp: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
     pve: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
@@ -97,7 +98,7 @@ function resetLiveData() {
   SERVER_STATS.activeBounties = 0;
 
   for (const p of DATA_PERIOD_IDS) {
-    RANKINGS[p] = { pvp: [], pve: [] };
+    RANKINGS[p] = { pvp: [], pve: [], hunters: [] };
     HIGHLIGHTS[p] = {
       pvp: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
       pve: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
@@ -188,6 +189,16 @@ function mapSafezoneRows(rows) {
     nick: row.name || "—",
     value: Number(row.total) || 0,
     transactions: Number(row.transactions) || 0,
+  }));
+}
+
+function mapHunterRows(rows) {
+  return (rows || []).map((row, i) => ({
+    rank: i + 1,
+    uid: row.uid || null,
+    nick: row.name || "—",
+    hunts: Number(row.value) || 0,
+    earned: Number(row.total_value) || 0,
   }));
 }
 
@@ -356,6 +367,12 @@ async function fetchSafezone(period, serverId = SELECTED_SERVER) {
   };
 }
 
+async function fetchTopHunters(period, serverId = SELECTED_SERVER) {
+  const data = await getJson(withServer(`/api/leaderboard?type=bounty_hunters&period=${period}&limit=3`, serverId));
+  if (serverId !== SELECTED_SERVER) return;
+  RANKINGS[period].hunters = mapHunterRows(data.rows || []);
+}
+
 async function fetchBounties(serverId = SELECTED_SERVER) {
   const [active, completed] = await Promise.all([
     getJson(withServer(`/api/bounties/active?limit=20`, serverId)),
@@ -405,6 +422,7 @@ async function refreshAll(serverId = SELECTED_SERVER) {
   const tasks = [
     ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m, serverId))),
     ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p, serverId)),
+    ...DATA_PERIOD_IDS.map((p) => fetchTopHunters(p, serverId)),
     fetchBounties(serverId),
     fetchServerStats(serverId),
   ];

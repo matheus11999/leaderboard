@@ -331,6 +331,49 @@ function LongestAliveCard({ data }) {
 }
 
 // ===================================================================
+// TopHuntersCard
+// ===================================================================
+function TopHuntersCard({ period, dataTick }) {
+  const { formatBRL, RANKINGS } = window.GAME_DATA;
+  const rows = useMemo(() => {
+    const periodRankings = RANKINGS?.[period] || {};
+    return Array.isArray(periodRankings.hunters) ? periodRankings.hunters.slice(0, 3) : [];
+  }, [period, dataTick]);
+  const periodLabel = (UI_PERIODS.find((p) => p.id === period) || UI_PERIODS[0]).label;
+  const totalEarned = rows.reduce((sum, row) => sum + (Number(row.earned) || 0), 0);
+
+  return (
+    <article className="th-card">
+      <span className="th-glow" aria-hidden="true" />
+      <header className="hi-head th-head">
+        <span className="hi-eyebrow">CACADAS</span>
+        <h3>TOP CACADORES</h3>
+      </header>
+      <div className="th-summary">
+        <span>{periodLabel}</span>
+        <strong>{formatBRL(totalEarned)}</strong>
+      </div>
+      {rows.length === 0 ? (
+        <div className="no-data th-empty">SEM CACADAS FINALIZADAS...</div>
+      ) : (
+        <div className="th-list">
+          {rows.map((hunter) => (
+            <div key={hunter.uid || hunter.nick || hunter.rank} className={`th-row th-rank-${hunter.rank}`}>
+              <span className="th-rank">#{String(hunter.rank).padStart(2, "0")}</span>
+              <div className="th-player">
+                <strong>{hunter.nick || "-"}</strong>
+                <span>{hunter.hunts} alvos abatidos</span>
+              </div>
+              <div className="th-money">{formatBRL(hunter.earned || 0)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+// ===================================================================
 // HuntCard (Caçada / Bounty) — reads GAME_DATA.BOUNTIES
 // ===================================================================
 function relativeTime(value) {
@@ -795,6 +838,7 @@ function App() {
             <div className="highlight-stack">
               <LongestShotCard data={highlights.longestShot} />
               <LongestAliveCard data={highlights.longestAlive} />
+              <TopHuntersCard period={period} dataTick={tick} />
             </div>
             <HuntCard bounties={bounties} />
           </section>

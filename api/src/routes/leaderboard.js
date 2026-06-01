@@ -15,6 +15,7 @@ const VALID_TYPES = new Set([
   'total_playtime',
   'current_kill_streak',
   'best_kill_streak',
+  'bounty_hunters',
 ]);
 
 const VALID_PERIODS = new Set(['daily', 'weekly', 'monthly', 'all']);
@@ -199,6 +200,24 @@ router.get('/', async (req, res) => {
           queryParams
         );
         rows = await padPlayerRows(r.rows, limit, selectedServer);
+        break;
+      }
+      case 'bounty_hunters': {
+        const r = await db.query(
+          `SELECT hunter_uid AS uid,
+                  (ARRAY_AGG(hunter_name ORDER BY occurred_at DESC))[1] AS name,
+                  COUNT(*)::INT AS value,
+                  COALESCE(SUM(bounty_value), 0)::BIGINT AS total_value
+             FROM bounty_events
+            WHERE hunter_uid IS NOT NULL
+              AND bounty_value > 0
+              ${serverClause} ${sinceClause}
+            GROUP BY hunter_uid
+            ORDER BY value DESC, total_value DESC
+            LIMIT $1`,
+          queryParams
+        );
+        rows = r.rows;
         break;
       }
     }

@@ -393,16 +393,18 @@ function HuntCard({ bounties }) {
           </button>
         </header>
 
-        <div className="hu-live-summary">
-          <div className="hu-live-stat">
-            <span>ALVOS ATIVOS</span>
-            <strong>{active.length}</strong>
+        {isActive && (
+          <div className="hu-live-summary">
+            <div className="hu-live-stat">
+              <span>ALVOS ATIVOS</span>
+              <strong>{active.length}</strong>
+            </div>
+            <div className="hu-live-stat is-gold">
+              <span>TOTAL EM JOGO</span>
+              <strong>{formatBRL(totalValue)}</strong>
+            </div>
           </div>
-          <div className="hu-live-stat is-gold">
-            <span>TOTAL EM JOGO</span>
-            <strong>{formatBRL(totalValue)}</strong>
-          </div>
-        </div>
+        )}
 
         {!isActive ? (
           <div className="hu-empty-state">
@@ -416,8 +418,6 @@ function HuntCard({ bounties }) {
               <p>As proximas sequencias PvP aparecem aqui assim que uma recompensa for aberta.</p>
             </div>
             <div className="hu-empty-history">
-              <span>HISTORICO</span>
-              <strong>{completed.length}</strong>
               <button type="button" onClick={() => setShowHunts(true)}>VER CACADAS FINALIZADAS</button>
             </div>
           </div>

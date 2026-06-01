@@ -417,9 +417,6 @@ function HuntCard({ bounties }) {
               <h4>NENHUM ALVO MARCADO</h4>
               <p>As proximas sequencias PvP aparecem aqui assim que uma recompensa for aberta.</p>
             </div>
-            <div className="hu-empty-history">
-              <button type="button" onClick={() => setShowHunts(true)}>VER CACADAS FINALIZADAS</button>
-            </div>
           </div>
         ) : (
           <React.Fragment>

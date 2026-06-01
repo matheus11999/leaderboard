@@ -14,6 +14,9 @@ const state = {
   current: 'overview',
   servers: [],
   selectedServer: DEFAULT_SERVER_ID,
+  loaded: {},
+  pending: 0,
+  lastOkAt: null,
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
@@ -29,6 +32,7 @@ const state = {
 
 // ---------- HTTP helpers ----------
 async function api(method, path, body) {
+  setBusy(true);
   const opts = {
     method,
     credentials: 'same-origin',
@@ -38,19 +42,25 @@ async function api(method, path, body) {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(API_BASE + path, opts);
-  if (res.status === 401) {
-    showLogin();
-    throw new Error('unauthorized');
+  try {
+    const res = await fetch(API_BASE + path, opts);
+    if (res.status === 401) {
+      showLogin();
+      throw new Error('unauthorized');
+    }
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
+    if (!res.ok) {
+      const msg = data?.error || data?.message || res.statusText;
+      throw new Error(msg);
+    }
+    setBusy(false, true);
+    return data;
+  } catch (err) {
+    setBusy(false, false);
+    throw err;
   }
-  const text = await res.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch { /* ignore */ }
-  if (!res.ok) {
-    const msg = data?.error || data?.message || res.statusText;
-    throw new Error(msg);
-  }
-  return data;
 }
 
 function withServer(path) {
@@ -67,6 +77,26 @@ function showDashboard() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
   loadServers().then(() => switchTab(state.current)).catch(() => switchTab(state.current));
+}
+
+function setBusy(isBusy, ok = null) {
+  const el = document.getElementById('app-status');
+  if (!el) return;
+  state.pending = Math.max(0, state.pending + (isBusy ? 1 : -1));
+  el.classList.toggle('is-loading', state.pending > 0);
+  el.classList.toggle('is-ok', state.pending === 0 && ok === true);
+  el.classList.toggle('is-err', state.pending === 0 && ok === false);
+  if (state.pending > 0) {
+    el.textContent = 'CARREGANDO';
+  } else if (ok === false) {
+    el.textContent = 'ERRO';
+  } else if (ok === true) {
+    state.lastOkAt = new Date();
+    el.textContent = 'OK';
+    setTimeout(() => {
+      if (state.pending === 0 && el.textContent === 'OK') el.textContent = '';
+    }, 1800);
+  }
 }
 
 // ---------- auth ----------
@@ -105,25 +135,41 @@ async function doLogout() {
 }
 
 // ---------- tabs ----------
-function switchTab(name) {
+function switchTab(name, opts = {}) {
   state.current = name;
   for (const btn of document.querySelectorAll('.tab')) btn.classList.toggle('is-active', btn.dataset.tab === name);
   for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('is-active', pane.id === 'pane-' + name);
-  refreshTab(name);
+  if (opts.force || !state.loaded[name]) refreshTab(name);
 }
 
 async function refreshTab(name) {
-  switch (name) {
-    case 'overview': return loadOverview();
-    case 'servers':  return loadServers();
-    case 'players':  return loadPlayers();
-    case 'kills':    return loadKills();
-    case 'sessions': return loadSessions();
-    case 'shop':     return loadShop();
-    case 'bounty':   return loadBounty();
-    case 'payments': return loadPayments();
-    case 'missions': return loadMissions();
-    case 'events':   return loadEvents();
+  try {
+    switch (name) {
+      case 'overview': await loadOverview(); break;
+      case 'servers':  await loadServers(); break;
+      case 'players':  await loadPlayers(); break;
+      case 'kills':    await loadKills(); break;
+      case 'sessions': await loadSessions(); break;
+      case 'shop':     await loadShop(); break;
+      case 'bounty':   await loadBounty(); break;
+      case 'payments': await loadPayments(); break;
+      case 'missions': await loadMissions(); break;
+      case 'events':   await loadEvents(); break;
+    }
+    state.loaded[name] = true;
+  } catch {
+    state.loaded[name] = false;
+  }
+}
+
+function reloadTab(name = state.current) {
+  state.loaded[name] = false;
+  return refreshTab(name);
+}
+
+function invalidateDataTabs() {
+  for (const key of Object.keys(state.loaded)) {
+    if (key !== 'servers') state.loaded[key] = false;
   }
 }
 
@@ -366,8 +412,9 @@ function renderServerSelects() {
         if (next === state.selectedServer) return;
         state.selectedServer = next;
         for (const pager of Object.values(state.pagers)) pager.offset = 0;
+        invalidateDataTabs();
         renderServerSelects();
-        refreshTab(state.current);
+        reloadTab(state.current);
       });
     }
   }
@@ -498,17 +545,17 @@ async function loadPayments() {
   const pager = state.pagers.payments;
   const claimed = document.getElementById('payments-claimed').value;
   const search = document.getElementById('payments-search').value.trim();
-  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+  const paymentServer = document.getElementById('payments-server')?.value || state.selectedServer || DEFAULT_SERVER_ID;
+  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset, server_id: paymentServer });
   if (claimed) q.set('claimed', claimed);
   if (search) q.set('search', search);
 
   try {
     const playerSelect = document.getElementById('payments-player');
-    const paymentServer = document.getElementById('payments-server')?.value || state.selectedServer || DEFAULT_SERVER_ID;
     if (!playerSelect.options.length || playerSelect.dataset.serverId !== paymentServer) {
       await loadPaymentPlayers();
     }
-    const d = await api('GET', withServer('/payments?' + q));
+    const d = await api('GET', '/payments?' + q);
     pager.total = d.total;
     renderTable('payments-table', [
       { key: 'created_at', label: 'CRIADO', render: v => fmtDate(v) },
@@ -599,7 +646,7 @@ async function purgeOldEvents() {
 function renderTable(tableId, cols, rows, actions) {
   const t = document.getElementById(tableId);
   if (!rows.length) {
-    t.innerHTML = '<tbody><tr><td style="padding:18px;color:var(--text-muted)">Nenhum registro.</td></tr></tbody>';
+    t.innerHTML = '<tbody><tr><td><div class="table-state">Nenhum registro para este filtro.</div></td></tr></tbody>';
     return;
   }
   const head = '<thead><tr>' +
@@ -645,11 +692,11 @@ function renderPager(elId, key) {
   `;
   el.querySelector('[data-pager-prev]')?.addEventListener('click', () => {
     p.offset = Math.max(0, p.offset - p.limit);
-    refreshTab(state.current);
+    reloadTab(state.current);
   });
   el.querySelector('[data-pager-next]')?.addEventListener('click', () => {
     p.offset += p.limit;
-    refreshTab(state.current);
+    reloadTab(state.current);
   });
 }
 
@@ -657,7 +704,7 @@ function renderPager(elId, key) {
 async function apiDelete(path, tab) {
   try {
     await api('DELETE', path);
-    refreshTab(tab);
+    reloadTab(tab);
   } catch (err) { alert('Falha ao deletar: ' + err.message); }
 }
 
@@ -730,22 +777,29 @@ function bindUI() {
   for (const btn of document.querySelectorAll('[data-refresh]')) {
     btn.addEventListener('click', () => {
       state.pagers[btn.dataset.refresh].offset = 0;
-      refreshTab(btn.dataset.refresh);
+      reloadTab(btn.dataset.refresh);
     });
   }
   // Search filters refresh on Enter or change.
   for (const id of ['players-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
-    document.getElementById(id).addEventListener('change', () => switchTab(state.current));
+    document.getElementById(id).addEventListener('change', () => {
+      state.pagers[state.current].offset = 0;
+      reloadTab(state.current);
+    });
   }
   document.getElementById('server-save').addEventListener('click', saveServer);
   for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'bounty-claimed', 'payments-claimed', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
-    document.getElementById(id).addEventListener('change', () => switchTab(state.current));
+    document.getElementById(id).addEventListener('change', () => {
+      state.pagers[state.current].offset = 0;
+      reloadTab(state.current);
+    });
   }
   document.getElementById('bounty-save').addEventListener('click', saveBountySettings);
   document.getElementById('payments-player-refresh').addEventListener('click', loadPaymentPlayers);
   document.getElementById('payments-player-search').addEventListener('change', loadPaymentPlayers);
   document.getElementById('payments-server').addEventListener('change', () => {
     state.pagers.payments.offset = 0;
+    state.loaded.payments = false;
     loadPaymentPlayers();
     loadPayments();
   });

@@ -67,6 +67,7 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
       <div className="hu2-topbar">
         <div className="hdr-brand">
           <div className="hdr-logo" aria-hidden="true">
+            <img className="hdr-logo-img" src="/assets/dayz-brasil-icon.png" alt="" />
             <svg viewBox="0 0 60 60" width="44" height="44" fill="none">
               <path d="M30 4 L52 16 L52 44 L30 56 L8 44 L8 16 Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="miter" />
               <path d="M30 10 L46 19 L46 41 L30 50 L14 41 L14 19 Z" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.45" />
@@ -169,7 +170,7 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
                     aria-selected={active}
                     className={`hero-u-server-btn ${active ? "is-active" : ""}`}
                     onClick={() => {
-                      if (!active) window.location.href = `/server/${encodeURIComponent(s.id)}`;
+                      if (!active) window.GAME_DATA.selectServer?.(s.id);
                     }}
                   >
                     {s.name || s.id}
@@ -377,7 +378,7 @@ function HuntCard({ bounties }) {
 
   return (
     <React.Fragment>
-      <article className={`ls-card hu-card hu-${isActive ? "active" : "idle"}`}>
+      <article className={`ls-card hu-card hu-${isActive ? "active" : "idle"} ${!isActive ? "hu-empty-board" : ""}`}>
         <span className="ls-glow hu-glow" aria-hidden="true" />
         {isActive && <span className="hu-scan" aria-hidden="true" />}
 
@@ -388,7 +389,7 @@ function HuntCard({ bounties }) {
           </span>
           <h3>RECOMPENSAS ATIVAS</h3>
           <button className="hu-view-btn" type="button" onClick={() => setShowHunts(true)}>
-            VER CAÇADAS
+            {isActive ? "VER CACADAS" : "VER HISTORICO"}
           </button>
         </header>
 
@@ -403,60 +404,77 @@ function HuntCard({ bounties }) {
           </div>
         </div>
 
-        <div className="hu-hero">
-          <div className="hu-streak-block">
-            <span className="hu-streak-big">{streak}</span>
-            <div className="hu-streak-meta">
-              <span className="hu-streak-bar" />
-              <span className="hu-streak-lbl-big">KILLS SEM MORRER</span>
+        {!isActive ? (
+          <div className="hu-empty-state">
+            <div className="hu-empty-radar" aria-hidden="true">
+              <span />
+              <i />
+            </div>
+            <div className="hu-empty-copy">
+              <span className="hu-empty-kicker">BOUNTY BOARD LIMPO</span>
+              <h4>NENHUM ALVO MARCADO</h4>
+              <p>As proximas sequencias PvP aparecem aqui assim que uma recompensa for aberta.</p>
+            </div>
+            <div className="hu-empty-history">
+              <span>HISTORICO</span>
+              <strong>{completed.length}</strong>
+              <button type="button" onClick={() => setShowHunts(true)}>VER CACADAS FINALIZADAS</button>
             </div>
           </div>
-          <div className="hu-hunter">
-            <div className="hu-hunter-pre">
-              <span className="hu-hunter-pre-dot" />
-              <span>{isActive ? "ALVO MAIS VALIOSO" : "SEM CACADA ATIVA"}</span>
-              <span className={`hu-status-pill ${isActive ? "is-active" : "is-ended"}`}>
-                {isActive ? "AO VIVO" : "VAZIO"}
-              </span>
-            </div>
-            <h4 className="hu-hunter-nick">{nick}</h4>
-          </div>
-        </div>
-
-        <div className="hu-bounty">
-          <span className="hu-bounty-icon" aria-hidden="true">$</span>
-          <div className="hu-bounty-text">
-            <span className="hu-bounty-lbl">MAIOR RECOMPENSA</span>
-            <span className="hu-bounty-val">{formatBRL(value)}</span>
-          </div>
-        </div>
-
-        <div className="hu-active-stack">
-          <div className="hu-active-stack-head">
-            <span>CAÇADAS ATIVAS</span>
-            <strong>{active.length}</strong>
-          </div>
-          <div className="hu-active-stack-list">
-            {active.length === 0 ? (
-              <div className="hu-active-empty">NENHUM ALVO COM RECOMPENSA AGORA</div>
-            ) : sortedActive.slice(0, 4).map((a, idx) => (
-              <div key={`active-mini-${a.uid || a.nick || idx}`} className="hu-active-mini">
-                <span className="hu-active-rank">#{String(idx + 1).padStart(2, "0")}</span>
-                <div className="hu-active-person">
-                  <strong>{a.nick || "-"}</strong>
-                  <span>{a.streak || 0} kills sem morrer</span>
-                </div>
-                <div className="hu-active-price">
-                  <strong>{formatBRL(a.value || 0)}</strong>
-                  <span>desde {relativeTime(a.since)}</span>
+        ) : (
+          <React.Fragment>
+            <div className="hu-hero">
+              <div className="hu-streak-block">
+                <span className="hu-streak-big">{streak}</span>
+                <div className="hu-streak-meta">
+                  <span className="hu-streak-bar" />
+                  <span className="hu-streak-lbl-big">KILLS SEM MORRER</span>
                 </div>
               </div>
-            ))}
-            {active.length > 4 && (
-              <div className="hu-active-more">+{active.length - 4} outras em andamento</div>
-            )}
-          </div>
-        </div>
+              <div className="hu-hunter">
+                <div className="hu-hunter-pre">
+                  <span className="hu-hunter-pre-dot" />
+                  <span>ALVO MAIS VALIOSO</span>
+                  <span className="hu-status-pill is-active">AO VIVO</span>
+                </div>
+                <h4 className="hu-hunter-nick">{nick}</h4>
+              </div>
+            </div>
+
+            <div className="hu-bounty">
+              <span className="hu-bounty-icon" aria-hidden="true">$</span>
+              <div className="hu-bounty-text">
+                <span className="hu-bounty-lbl">MAIOR RECOMPENSA</span>
+                <span className="hu-bounty-val">{formatBRL(value)}</span>
+              </div>
+            </div>
+
+            <div className="hu-active-stack">
+              <div className="hu-active-stack-head">
+                <span>CACADAS ATIVAS</span>
+                <strong>{active.length}</strong>
+              </div>
+              <div className="hu-active-stack-list">
+                {sortedActive.slice(0, 4).map((a, idx) => (
+                  <div key={`active-mini-${a.uid || a.nick || idx}`} className="hu-active-mini">
+                    <span className="hu-active-rank">#{String(idx + 1).padStart(2, "0")}</span>
+                    <div className="hu-active-person">
+                      <strong>{a.nick || "-"}</strong>
+                      <span>{a.streak || 0} kills sem morrer</span>
+                    </div>
+                    <div className="hu-active-price">
+                      <strong>{formatBRL(a.value || 0)}</strong>
+                      <span>desde {relativeTime(a.since)}</span>
+                    </div>
+                  </div>
+                ))}
+                {active.length > 4 && (
+                  <div className="hu-active-more">+{active.length - 4} outras em andamento</div>
+                )}
+              </div>
+            </div>
+          </React.Fragment>
+        )}
       </article>
 
       {showHunts && (

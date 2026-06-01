@@ -63,7 +63,7 @@ const BOUNTIES = {
   completed: [],
 };
 const SERVERS = [];
-const SELECTED_SERVER = detectSelectedServer();
+let SELECTED_SERVER = detectSelectedServer();
 const SERVER_STATS = {
   onlineNow: 0,
   maxPlayers: 80,
@@ -81,6 +81,29 @@ for (const p of DATA_PERIOD_IDS) {
     pve: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
   };
   SAFEZONE[p] = { seller: emptySafezoneSide(), buyer: emptySafezoneSide(), sellers: [], buyers: [] };
+}
+
+function resetLiveData() {
+  KILL_FEED.length = 0;
+  BOUNTIES.active = [];
+  BOUNTIES.completed = [];
+  SERVER_STATS.onlineNow = 0;
+  SERVER_STATS.maxPlayers = 80;
+  SERVER_STATS.totalPlayersRegistered = 0;
+  SERVER_STATS.totalKills = 0;
+  SERVER_STATS.totalPvpKills = 0;
+  SERVER_STATS.activeMissions = 0;
+  SERVER_STATS.killsLast24h = 0;
+  SERVER_STATS.activeBounties = 0;
+
+  for (const p of DATA_PERIOD_IDS) {
+    RANKINGS[p] = { pvp: [], pve: [] };
+    HIGHLIGHTS[p] = {
+      pvp: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
+      pve: { longestShot: emptyLongestShot(), longestAlive: emptyLongestAlive() },
+    };
+    SAFEZONE[p] = { seller: emptySafezoneSide(), buyer: emptySafezoneSide(), sellers: [], buyers: [] };
+  }
 }
 
 // -------------------------------------------------------------------
@@ -217,6 +240,7 @@ window.GAME_DATA = {
   formatBRL,
   makeKillEvent,
   seedKillFeed,
+  selectServer,
   randInt,
   pick,
 };
@@ -240,9 +264,33 @@ function detectSelectedServer() {
   return DEFAULT_SERVER_ID;
 }
 
-function withServer(url) {
+function withServer(url, serverId = SELECTED_SERVER) {
   const sep = url.includes("?") ? "&" : "?";
-  return `${url}${sep}server=${encodeURIComponent(SELECTED_SERVER)}`;
+  return `${url}${sep}server=${encodeURIComponent(serverId)}`;
+}
+
+function serverUrl(serverId) {
+  return `/server/${encodeURIComponent(serverId || DEFAULT_SERVER_ID)}`;
+}
+
+function selectServer(serverId, opts = {}) {
+  const next = String(serverId || DEFAULT_SERVER_ID).trim() || DEFAULT_SERVER_ID;
+  if (next === SELECTED_SERVER) return false;
+
+  SELECTED_SERVER = next;
+  window.GAME_DATA.SELECTED_SERVER = next;
+  resetLiveData();
+
+  if (opts.updateUrl !== false && window.history?.pushState) {
+    window.history.pushState({ server: next }, "", serverUrl(next));
+  }
+
+  window.dispatchEvent(new CustomEvent("server-changing", { detail: { server: next } }));
+  window.dispatchEvent(new CustomEvent("killfeed-updated"));
+  window.dispatchEvent(new CustomEvent("gamedata-updated"));
+  fetchKillFeedLive(next);
+  refreshAll(next);
+  return true;
 }
 
 async function fetchServers() {
@@ -259,9 +307,10 @@ async function fetchServers() {
 // -------------------------------------------------------------------
 // Kill feed — dedicated 10s refresh, no cache, fires killfeed-updated
 // -------------------------------------------------------------------
-async function fetchKillFeedLive() {
+async function fetchKillFeedLive(serverId = SELECTED_SERVER) {
   try {
-    const data = await getJson(withServer("/api/killfeed?limit=200"), { cache: "no-store" });
+    const data = await getJson(withServer("/api/killfeed?limit=200", serverId), { cache: "no-store" });
+    if (serverId !== SELECTED_SERVER) return;
     KILL_FEED.length = 0;
     for (const row of data.rows || []) KILL_FEED.push(mapKillFeedRow(row));
     window.dispatchEvent(new CustomEvent("killfeed-updated"));
@@ -273,15 +322,16 @@ async function fetchKillFeedLive() {
 // -------------------------------------------------------------------
 // Leaderboard + safezone — 30s refresh
 // -------------------------------------------------------------------
-async function fetchPeriodMode(period, mode) {
+async function fetchPeriodMode(period, mode, serverId = SELECTED_SERVER) {
   const type = mode === "pvp" ? "pvp_kills" : "pve_kills";
   const [kills, deathsAgg, lifeAgg, longestShot, longestAlive] = await Promise.all([
-    getJson(withServer(`/api/leaderboard?type=${type}&period=${period}&limit=${TOP_LIMIT}`)),
-    getJson(withServer(`/api/leaderboard?type=most_deaths&period=${period}&limit=200`)),
-    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=200`)),
-    getJson(withServer(`/api/leaderboard?type=longest_shot&period=${period}&limit=1`)),
-    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=1`)),
+    getJson(withServer(`/api/leaderboard?type=${type}&period=${period}&limit=${TOP_LIMIT}`, serverId)),
+    getJson(withServer(`/api/leaderboard?type=most_deaths&period=${period}&limit=200`, serverId)),
+    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=200`, serverId)),
+    getJson(withServer(`/api/leaderboard?type=longest_shot&period=${period}&limit=1`, serverId)),
+    getJson(withServer(`/api/leaderboard?type=longest_life&period=${period}&limit=1`, serverId)),
   ]);
+  if (serverId !== SELECTED_SERVER) return;
 
   const deathsByUid = new Map();
   for (const r of deathsAgg.rows || []) deathsByUid.set(r.uid, Number(r.value) || 0);
@@ -295,8 +345,9 @@ async function fetchPeriodMode(period, mode) {
   };
 }
 
-async function fetchSafezone(period) {
-  const data = await getJson(withServer(`/api/safezone?period=${period}`));
+async function fetchSafezone(period, serverId = SELECTED_SERVER) {
+  const data = await getJson(withServer(`/api/safezone?period=${period}`, serverId));
+  if (serverId !== SELECTED_SERVER) return;
   SAFEZONE[period] = {
     seller: mapSafezoneSide(data.seller),
     buyer: mapSafezoneSide(data.buyer),
@@ -305,11 +356,12 @@ async function fetchSafezone(period) {
   };
 }
 
-async function fetchBounties() {
+async function fetchBounties(serverId = SELECTED_SERVER) {
   const [active, completed] = await Promise.all([
-    getJson(withServer(`/api/bounties/active?limit=20`)),
-    getJson(withServer(`/api/bounties/completed?limit=20`)),
+    getJson(withServer(`/api/bounties/active?limit=20`, serverId)),
+    getJson(withServer(`/api/bounties/completed?limit=20`, serverId)),
   ]);
+  if (serverId !== SELECTED_SERVER) return;
 
   BOUNTIES.active = (active.rows || []).map((r) => ({
     uid: r.uid || null,
@@ -337,8 +389,9 @@ async function fetchBounties() {
   }));
 }
 
-async function fetchServerStats() {
-  const data = await getJson(withServer(`/api/stats/server`));
+async function fetchServerStats(serverId = SELECTED_SERVER) {
+  const data = await getJson(withServer(`/api/stats/server`, serverId));
+  if (serverId !== SELECTED_SERVER) return;
   SERVER_STATS.onlineNow = Number(data.online_now) || 0;
   SERVER_STATS.totalPlayersRegistered = Number(data.total_players_registered) || 0;
   SERVER_STATS.totalKills = Number(data.total_kills) || 0;
@@ -348,12 +401,12 @@ async function fetchServerStats() {
   SERVER_STATS.activeBounties = Number(data.active_bounties) || 0;
 }
 
-async function refreshAll() {
+async function refreshAll(serverId = SELECTED_SERVER) {
   const tasks = [
-    ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m))),
-    ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p)),
-    fetchBounties(),
-    fetchServerStats(),
+    ...DATA_PERIOD_IDS.flatMap((p) => MODES.map((m) => fetchPeriodMode(p, m, serverId))),
+    ...DATA_PERIOD_IDS.map((p) => fetchSafezone(p, serverId)),
+    fetchBounties(serverId),
+    fetchServerStats(serverId),
   ];
 
   const results = await Promise.allSettled(tasks);
@@ -361,8 +414,15 @@ async function refreshAll() {
   if (failed.length) {
     console.warn("[data.jsx] partial refresh failed:", failed.map((r) => r.reason?.message || r.reason).join(" | "));
   }
-  window.dispatchEvent(new CustomEvent("gamedata-updated"));
+  if (serverId === SELECTED_SERVER) {
+    window.dispatchEvent(new CustomEvent("gamedata-updated"));
+  }
 }
+
+window.addEventListener("popstate", () => {
+  const next = detectSelectedServer();
+  selectServer(next, { updateUrl: false });
+});
 
 // Boot
 fetchKillFeedLive();

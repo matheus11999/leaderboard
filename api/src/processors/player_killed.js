@@ -81,12 +81,23 @@ module.exports = async function (data, envelope = {}) {
     }
 
     const victimBefore = await c.query(
-      `SELECT current_kill_streak, bounty_active, bounty_value, bounty_started_at
+      `SELECT current_kill_streak, bounty_active, bounty_value, bounty_started_at,
+              life_started_at, life_server_id,
+              CASE
+                WHEN life_started_at IS NOT NULL
+                 AND (life_server_id IS NULL OR life_server_id = $2)
+                THEN GREATEST(0, EXTRACT(EPOCH FROM (NOW() - life_started_at))::INT)
+                ELSE NULL
+              END AS portal_alive_s
          FROM players
         WHERE uid = $1`,
-      [victim.uid]
+      [victim.uid, serverId]
     );
     const victimState = victimBefore.rows[0] || {};
+    const portalAliveSeconds = Number(victimState.portal_alive_s);
+    const effectiveAliveSeconds = Number.isFinite(portalAliveSeconds) && portalAliveSeconds > 0
+      ? portalAliveSeconds
+      : safeAliveSeconds;
 
     // Insert kill row.
     await c.query(
@@ -119,7 +130,7 @@ module.exports = async function (data, envelope = {}) {
         safeDistanceM,
         !!data.is_pvp,
         isSuicide,
-        safeAliveSeconds,
+        effectiveAliveSeconds,
         Number.isFinite(hydration) ? hydration : null,
         Number.isFinite(energy) ? energy : null,
         typeof stats.bleeding === 'boolean' ? stats.bleeding : null,
@@ -165,9 +176,11 @@ module.exports = async function (data, envelope = {}) {
          bounty_value = 0,
          bounty_started_at = NULL,
          bounty_server_id = NULL,
+         life_started_at = NULL,
+         life_server_id = NULL,
          last_seen      = NOW()
        WHERE uid = $3`,
-      [safeAliveSeconds || 0, rankedDeathIncrement, victim.uid]
+      [effectiveAliveSeconds || 0, rankedDeathIncrement, victim.uid]
     );
 
     // Bump killer counters if a player killed another player (not suicide).

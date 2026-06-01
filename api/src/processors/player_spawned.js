@@ -16,6 +16,18 @@ module.exports = async function (data, envelope = {}) {
   const serverId = normalizeServerId(envelope.server_id || data.server_id);
 
   await db.tx(async (c) => {
+    await c.query(
+      `INSERT INTO players (uid, name, current_balance, life_started_at, life_server_id)
+       VALUES ($1, $2, $3, NOW(), $4)
+       ON CONFLICT (uid) DO UPDATE SET
+         name = EXCLUDED.name,
+         last_seen = NOW(),
+         current_balance = COALESCE(EXCLUDED.current_balance, players.current_balance),
+         life_started_at = NOW(),
+         life_server_id = $4`,
+      [player.uid, player.name || 'Unknown', balance.total ?? 0, serverId]
+    );
+
     // Keep balance in players in sync if provided.
     if (balance.total != null) {
       await c.query(

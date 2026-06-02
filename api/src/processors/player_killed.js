@@ -14,6 +14,10 @@ const DEATH_COLUMN = {
   suicide: 'deaths_suicide',
 };
 
+const BOUNTY_EXCLUDED_WEAPONS = new Set([
+  'huntsmanknifeac',
+]);
+
 function bountyValueForStreak(streak, settings) {
   if (!settings?.enabled) return 0;
 
@@ -24,6 +28,19 @@ function bountyValueForStreak(streak, settings) {
 
   const extraKills = Math.max(0, streak - minKills);
   return Math.min(10_000_000, Math.round(baseValue * Math.pow(1 + increasePct / 100, extraKills)));
+}
+
+function isBountyExcludedWeapon(weapon = {}) {
+  const candidates = [
+    weapon.name,
+    weapon.prefab,
+  ];
+
+  return candidates.some((value) => {
+    if (!value) return false;
+    const normalized = String(value).toLowerCase();
+    return [...BOUNTY_EXCLUDED_WEAPONS].some((blocked) => normalized.includes(blocked));
+  });
 }
 
 module.exports = async function (data, envelope = {}) {
@@ -47,6 +64,7 @@ module.exports = async function (data, envelope = {}) {
   const serverId = normalizeServerId(envelope.server_id || data.server_id);
   const isSuicide = data.is_suicide === true || data.is_suicide === 1 || data.is_suicide === 'true';
   const rankedDeathIncrement = isSuicide ? 0 : 1;
+  const bountyExcludedWeapon = isBountyExcludedWeapon(weapon);
 
   await db.tx(async (c) => {
     const settingsR = await c.query(
@@ -142,7 +160,8 @@ module.exports = async function (data, envelope = {}) {
       victimState.bounty_active &&
       killerUid &&
       killerUid !== victim.uid &&
-      !isSuicide
+      !isSuicide &&
+      !bountyExcludedWeapon
     ) {
       await c.query(
         `INSERT INTO bounty_events (

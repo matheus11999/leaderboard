@@ -514,7 +514,15 @@ router.get('/players/:uid', async (req, res) => {
 });
 
 router.patch('/players/:uid', express.json(), async (req, res) => {
-  const { name, is_banned, reset_stats } = req.body || {};
+  const {
+    name,
+    is_banned,
+    reset_stats,
+    bounty_active,
+    bounty_value,
+    bounty_server_id,
+    current_kill_streak,
+  } = req.body || {};
   const sets = [];
   const params = [req.params.uid];
   if (typeof name === 'string' && name.trim()) {
@@ -524,6 +532,30 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
   if (typeof is_banned === 'boolean') {
     params.push(is_banned);
     sets.push(`is_banned = $${params.length}`);
+  }
+  if (typeof bounty_active === 'boolean') {
+    params.push(bounty_active);
+    sets.push(`bounty_active = $${params.length}`);
+    if (bounty_active)
+      sets.push(`bounty_started_at = COALESCE(bounty_started_at, NOW())`);
+    else
+      sets.push(`bounty_started_at = NULL, bounty_server_id = NULL, bounty_value = 0`);
+  }
+  if (bounty_value !== undefined) {
+    const bountyValue = clampNumber(bounty_value, 0, 0, 10000000);
+    params.push(Math.round(bountyValue));
+    sets.push(`bounty_value = $${params.length}`);
+  }
+  if (typeof bounty_server_id === 'string') {
+    const serverId = normalizeServerId(bounty_server_id);
+    await ensureServer(db, serverId);
+    params.push(serverId);
+    sets.push(`bounty_server_id = $${params.length}`);
+  }
+  if (current_kill_streak !== undefined) {
+    const streak = clampNumber(current_kill_streak, 0, 0, 100000);
+    params.push(Math.round(streak));
+    sets.push(`current_kill_streak = $${params.length}`);
   }
   if (reset_stats === true) {
     sets.push(`total_kills = 0, total_deaths = 0, deaths_pvp = 0, deaths_zombie = 0,

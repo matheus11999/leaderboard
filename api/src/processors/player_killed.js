@@ -185,17 +185,21 @@ module.exports = async function (data, envelope = {}) {
       );
     }
 
-    // Bump victim counters and reset any active PvP streak/bounty.
+    // Bump victim counters and reset PvP streak. A bounty only ends when the
+    // target is killed by another player; NPC/environment deaths keep it active.
+    const resetBountySql = (killerUid && !isSuicide)
+      ? `bounty_active = false,
+         bounty_value = 0,
+         bounty_started_at = NULL,
+         bounty_server_id = NULL,`
+      : '';
     await c.query(
       `UPDATE players SET
          total_deaths   = total_deaths + $2,
          ${deathCol}    = ${deathCol} + 1,
          longest_life_s = GREATEST(longest_life_s, COALESCE($1, 0)),
          current_kill_streak = 0,
-         bounty_active = false,
-         bounty_value = 0,
-         bounty_started_at = NULL,
-         bounty_server_id = NULL,
+         ${resetBountySql}
          life_started_at = NULL,
          life_server_id = NULL,
          last_seen      = NOW()

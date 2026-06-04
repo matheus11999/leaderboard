@@ -1,6 +1,7 @@
 'use strict';
 
 const express = require('express');
+const bcrypt = require('bcrypt');
 const db = require('../db');
 const { requireAdmin, login } = require('../auth');
 const { normalizeServerId, slugifyServerId, serverFilter, ensureServer } = require('../lib/servers');
@@ -34,6 +35,132 @@ router.use(requireAdmin);
 
 router.get('/me', (req, res) => {
   res.json({ admin: req.admin });
+});
+
+// -------------------------------------------------------------------
+// Admin users
+// -------------------------------------------------------------------
+function normalizeAdminUsername(raw) {
+  const username = String(raw || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) return null;
+  return username;
+}
+
+router.get('/admins', async (_req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT username, created_at
+         FROM admin_users
+        ORDER BY username ASC`
+    );
+    res.json({ rows: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.post('/admins', express.json(), async (req, res) => {
+  const username = normalizeAdminUsername(req.body?.username);
+  const password = String(req.body?.password || '');
+  if (!username) {
+    return res.status(400).json({ error: 'username must be 3-32 chars: a-z, 0-9, dot, dash or underscore' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'password must be at least 8 characters' });
+  }
+
+  try {
+    const hash = await bcrypt.hash(password, 12);
+    const r = await db.query(
+      `INSERT INTO admin_users (username, password_hash)
+       VALUES ($1, $2)
+       ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash
+       RETURNING username, created_at`,
+      [username, hash]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'save failed', message: err.message });
+  }
+});
+
+router.patch('/admins/:username', express.json(), async (req, res) => {
+  const oldUsername = normalizeAdminUsername(req.params.username);
+  const newUsername = req.body?.username ? normalizeAdminUsername(req.body.username) : oldUsername;
+  const password = req.body?.password != null ? String(req.body.password) : '';
+  if (!oldUsername || !newUsername) {
+    return res.status(400).json({ error: 'invalid username' });
+  }
+  if (oldUsername === req.admin?.username && newUsername !== oldUsername) {
+    return res.status(400).json({ error: 'cannot rename the admin currently logged in' });
+  }
+  if (password && password.length < 8) {
+    return res.status(400).json({ error: 'password must be at least 8 characters' });
+  }
+
+  try {
+    const r = await db.tx(async (c) => {
+      const exists = await c.query(`SELECT username FROM admin_users WHERE username = $1`, [oldUsername]);
+      if (!exists.rows[0]) return { rows: [] };
+
+      if (newUsername !== oldUsername) {
+        const taken = await c.query(`SELECT username FROM admin_users WHERE username = $1`, [newUsername]);
+        if (taken.rows[0]) {
+          const err = new Error('username already exists');
+          err.statusCode = 409;
+          throw err;
+        }
+      }
+
+      if (password) {
+        const hash = await bcrypt.hash(password, 12);
+        return c.query(
+          `UPDATE admin_users
+              SET username = $2, password_hash = $3
+            WHERE username = $1
+            RETURNING username, created_at`,
+          [oldUsername, newUsername, hash]
+        );
+      }
+
+      return c.query(
+        `UPDATE admin_users
+            SET username = $2
+          WHERE username = $1
+          RETURNING username, created_at`,
+        [oldUsername, newUsername]
+      );
+    });
+
+    if (!r.rows[0]) return res.status(404).json({ error: 'not found' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: err.statusCode === 409 ? 'conflict' : 'save failed', message: err.message });
+  }
+});
+
+router.delete('/admins/:username', async (req, res) => {
+  const username = normalizeAdminUsername(req.params.username);
+  if (!username) return res.status(400).json({ error: 'invalid username' });
+  if (username === req.admin?.username) {
+    return res.status(400).json({ error: 'cannot delete the admin currently logged in' });
+  }
+
+  try {
+    const r = await db.tx(async (c) => {
+      const countR = await c.query(`SELECT COUNT(*)::INT AS n FROM admin_users`);
+      if (countR.rows[0].n <= 1) {
+        const err = new Error('cannot delete the last admin');
+        err.statusCode = 400;
+        throw err;
+      }
+      return c.query(`DELETE FROM admin_users WHERE username = $1 RETURNING username`, [username]);
+    });
+    if (!r.rows[0]) return res.status(404).json({ error: 'not found' });
+    res.json({ deleted: r.rows[0] });
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ error: 'delete failed', message: err.message });
+  }
 });
 
 // -------------------------------------------------------------------

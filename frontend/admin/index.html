@@ -64,6 +64,7 @@
     <button class="tab" data-tab="shop">LOJA</button>
     <button class="tab" data-tab="bounty">BOUNTY</button>
     <button class="tab" data-tab="payments">PAGAMENTOS</button>
+    <button class="tab" data-tab="admins">ADMINS</button>
     <button class="tab" data-tab="missions">MISSÕES</button>
     <button class="tab" data-tab="events">EVENTOS RAW</button>
   </nav>
@@ -262,6 +263,38 @@
       <div class="pager" id="payments-pager"></div>
     </section>
 
+    <!-- ADMINS -->
+    <section class="tab-pane" id="pane-admins">
+      <h2 class="pane-title">ADMINISTRADORES <span class="accent">// ACESSO</span></h2>
+      <div class="settings-card">
+        <input type="hidden" id="admin-original-username" />
+        <div class="settings-grid">
+          <label class="field">
+            <span class="field-label">USUARIO</span>
+            <input type="text" id="admin-username" placeholder="novo_admin" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span class="field-label">NOVA SENHA</span>
+            <input type="password" id="admin-password" placeholder="minimo 8 caracteres" autocomplete="new-password" />
+          </label>
+          <label class="field">
+            <span class="field-label">CONFIRMAR SENHA</span>
+            <input type="password" id="admin-password-confirm" placeholder="repita a senha" autocomplete="new-password" />
+          </label>
+        </div>
+        <div class="section-note">Usuario aceita letras, numeros, ponto, traco e underline. Para editar sem trocar senha, deixe os campos de senha vazios.</div>
+        <div class="toolbar">
+          <button class="btn-primary" id="admin-save">SALVAR ADMIN</button>
+          <button class="btn-ghost" id="admin-clear" type="button">LIMPAR</button>
+          <span class="form-status" id="admin-status"></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn-ghost" data-refresh="admins">ATUALIZAR</button>
+      </div>
+      <div class="table-wrap"><table id="admins-table" class="data-table"></table></div>
+    </section>
+
     <!-- MISSIONS -->
     <section class="tab-pane" id="pane-missions">
       <h2 class="pane-title">MISSÕES</h2>
@@ -324,6 +357,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20260531-2"></script>
+<script src="admin.js?v=20260603-1"></script>
 </body>
 </html>

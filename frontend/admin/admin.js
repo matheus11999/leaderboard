@@ -25,6 +25,7 @@ const state = {
     shop:     { offset: 0, limit: 50, total: 0 },
     bounty:   { offset: 0, limit: 50, total: 0 },
     payments: { offset: 0, limit: 50, total: 0 },
+    admins:   { offset: 0, limit: 500, total: 0 },
     missions: { offset: 0, limit: 50, total: 0 },
     events:   { offset: 0, limit: 100, total: 0 },
   },
@@ -153,6 +154,7 @@ async function refreshTab(name) {
       case 'shop':     await loadShop(); break;
       case 'bounty':   await loadBounty(); break;
       case 'payments': await loadPayments(); break;
+      case 'admins':   await loadAdmins(); break;
       case 'missions': await loadMissions(); break;
       case 'events':   await loadEvents(); break;
     }
@@ -579,6 +581,80 @@ async function loadPayments() {
   }
 }
 
+// ---------- admins ----------
+async function loadAdmins() {
+  try {
+    const d = await api('GET', '/admins');
+    renderTable('admins-table', [
+      { key: 'username', label: 'USUARIO' },
+      { key: 'created_at', label: 'CRIADO EM', render: v => fmtDate(v) },
+      { key: 'current', label: 'SESSAO', render: (_v, r) => r.username === state.user?.username ? '<span class="pill is-ok">VOCE</span>' : '<span class="pill">ADMIN</span>' },
+    ], d.rows || [], [
+      { label: 'EDIT', onClick: fillAdminForm },
+      { label: 'DEL', kind: 'danger', onClick: r => {
+        if (r.username === state.user?.username) return alert('Voce nao pode remover o admin que esta logado.');
+        confirmDelete('admin ' + r.username, () => apiDelete('/admins/' + encodeURIComponent(r.username), 'admins'));
+      } },
+    ]);
+  } catch (err) {
+    alert('Erro admins: ' + err.message);
+  }
+}
+
+function clearAdminForm() {
+  document.getElementById('admin-original-username').value = '';
+  document.getElementById('admin-username').value = '';
+  document.getElementById('admin-password').value = '';
+  document.getElementById('admin-password-confirm').value = '';
+  document.getElementById('admin-status').textContent = '';
+}
+
+function fillAdminForm(row) {
+  document.getElementById('admin-original-username').value = row.username || '';
+  document.getElementById('admin-username').value = row.username || '';
+  document.getElementById('admin-password').value = '';
+  document.getElementById('admin-password-confirm').value = '';
+  document.getElementById('admin-status').textContent = 'Editando admin existente. Informe nova senha somente se quiser trocar.';
+}
+
+async function saveAdmin() {
+  const status = document.getElementById('admin-status');
+  const original = document.getElementById('admin-original-username').value.trim();
+  const username = document.getElementById('admin-username').value.trim();
+  const password = document.getElementById('admin-password').value;
+  const confirm = document.getElementById('admin-password-confirm').value;
+
+  if (!username) {
+    status.textContent = 'Informe o usuario.';
+    return;
+  }
+  if (password !== confirm) {
+    status.textContent = 'As senhas nao conferem.';
+    return;
+  }
+  if (!original && password.length < 8) {
+    status.textContent = 'Para criar admin, informe senha com minimo 8 caracteres.';
+    return;
+  }
+
+  status.textContent = 'Salvando...';
+  try {
+    const body = { username };
+    if (password) body.password = password;
+    if (original) {
+      await api('PATCH', '/admins/' + encodeURIComponent(original), body);
+    } else {
+      await api('POST', '/admins', body);
+    }
+    clearAdminForm();
+    status.textContent = 'Admin salvo.';
+    setTimeout(() => { if (status.textContent === 'Admin salvo.') status.textContent = ''; }, 2500);
+    await loadAdmins();
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  }
+}
+
 // ---------- missions ----------
 async function loadMissions() {
   const pager = state.pagers.missions;
@@ -776,7 +852,7 @@ function bindUI() {
   }
   for (const btn of document.querySelectorAll('[data-refresh]')) {
     btn.addEventListener('click', () => {
-      state.pagers[btn.dataset.refresh].offset = 0;
+      if (state.pagers[btn.dataset.refresh]) state.pagers[btn.dataset.refresh].offset = 0;
       reloadTab(btn.dataset.refresh);
     });
   }
@@ -804,6 +880,8 @@ function bindUI() {
     loadPayments();
   });
   document.getElementById('payments-create').addEventListener('click', createPayment);
+  document.getElementById('admin-save').addEventListener('click', saveAdmin);
+  document.getElementById('admin-clear').addEventListener('click', clearAdminForm);
   document.getElementById('events-purge').addEventListener('click', purgeOldEvents);
 }
 

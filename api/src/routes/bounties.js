@@ -23,7 +23,7 @@ router.get('/active', async (req, res) => {
 
   try {
     const r = await db.query(
-      `SELECT uid, name, current_kill_streak, best_kill_streak,
+      `SELECT uid, name, current_kill_streak, best_kill_streak, bounty_streak,
               bounty_value, bounty_started_at, last_seen
          FROM players
         WHERE bounty_active = true ${serverClause}

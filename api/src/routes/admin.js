@@ -664,9 +664,9 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
     params.push(bounty_active);
     sets.push(`bounty_active = $${params.length}`);
     if (bounty_active)
-      sets.push(`bounty_started_at = COALESCE(bounty_started_at, NOW())`);
+      sets.push(`bounty_started_at = COALESCE(bounty_started_at, NOW()), bounty_streak = GREATEST(bounty_streak, current_kill_streak)`);
     else
-      sets.push(`bounty_started_at = NULL, bounty_server_id = NULL, bounty_value = 0`);
+      sets.push(`bounty_started_at = NULL, bounty_server_id = NULL, bounty_value = 0, bounty_streak = 0`);
   }
   if (bounty_value !== undefined) {
     const bountyValue = clampNumber(bounty_value, 0, 0, 10000000);
@@ -689,7 +689,7 @@ router.patch('/players/:uid', express.json(), async (req, res) => {
                deaths_bandit = 0, deaths_env = 0, deaths_suicide = 0,
                longest_shot_m = 0, longest_life_s = 0,
                current_kill_streak = 0, best_kill_streak = 0,
-               bounty_active = false, bounty_value = 0, bounty_started_at = NULL, bounty_server_id = NULL`);
+               bounty_active = false, bounty_value = 0, bounty_streak = 0, bounty_started_at = NULL, bounty_server_id = NULL`);
   }
   if (!sets.length) return res.status(400).json({ error: 'no fields to update' });
 

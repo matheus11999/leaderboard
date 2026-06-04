@@ -383,7 +383,8 @@ async function fetchBounties(serverId = SELECTED_SERVER) {
   BOUNTIES.active = (active.rows || []).map((r) => ({
     uid: r.uid || null,
     nick: r.name || "—",
-    streak: Number(r.current_kill_streak) || 0,
+    streak: Number(r.bounty_streak) || Number(r.current_kill_streak) || 0,
+    currentStreak: Number(r.current_kill_streak) || 0,
     bestStreak: Number(r.best_kill_streak) || 0,
     value: Number(r.bounty_value) || 0,
     since: r.bounty_started_at || null,

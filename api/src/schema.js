@@ -27,6 +27,7 @@ async function ensureSchema() {
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS best_kill_streak INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_active BOOL NOT NULL DEFAULT false`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_value INT NOT NULL DEFAULT 0`,
+    `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_streak INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_started_at TIMESTAMPTZ`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_server_id TEXT`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS life_started_at TIMESTAMPTZ`,
@@ -42,6 +43,25 @@ async function ensureSchema() {
     `INSERT INTO bounty_settings (id)
        VALUES (true)
        ON CONFLICT (id) DO NOTHING`,
+    `UPDATE players p
+        SET bounty_streak = GREATEST(
+          p.bounty_streak,
+          p.current_kill_streak,
+          CASE
+            WHEN p.bounty_value > 0 THEN (
+              s.min_kills +
+              CASE
+                WHEN s.base_value > 0 AND s.increase_pct > 0 THEN
+                  GREATEST(0, ROUND(LN(GREATEST(p.bounty_value::NUMERIC, 1) / s.base_value::NUMERIC) / LN(1 + (s.increase_pct::NUMERIC / 100)))::INT)
+                ELSE 0
+              END
+            )
+            ELSE 0
+          END
+        )
+       FROM bounty_settings s
+      WHERE p.bounty_active = true
+        AND p.bounty_streak = 0`,
     `CREATE TABLE IF NOT EXISTS bounty_events (
        id BIGSERIAL PRIMARY KEY,
        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

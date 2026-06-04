@@ -100,7 +100,7 @@ module.exports = async function (data, envelope = {}) {
     }
 
     const victimBefore = await c.query(
-      `SELECT current_kill_streak, bounty_active, bounty_value, bounty_started_at,
+      `SELECT current_kill_streak, bounty_active, bounty_value, bounty_streak, bounty_started_at,
               life_started_at, life_server_id,
               CASE
                 WHEN life_started_at IS NOT NULL
@@ -175,7 +175,7 @@ module.exports = async function (data, envelope = {}) {
           victim.name || 'Unknown',
           killerUid,
           killer.player?.name || killer.name || 'Unknown',
-          Number(victimState.current_kill_streak) || 0,
+          Number(victimState.bounty_streak) || Number(victimState.current_kill_streak) || 0,
           Number(victimState.bounty_value) || 0,
           weapon.name || null,
           weapon.prefab || null,
@@ -190,6 +190,7 @@ module.exports = async function (data, envelope = {}) {
     const resetBountySql = (killerUid && !isSuicide)
       ? `bounty_active = false,
          bounty_value = 0,
+         bounty_streak = 0,
          bounty_started_at = NULL,
          bounty_server_id = NULL,`
       : '';
@@ -229,10 +230,14 @@ module.exports = async function (data, envelope = {}) {
           `UPDATE players SET
              bounty_active = true,
              bounty_value = $1,
+             bounty_streak = CASE
+               WHEN bounty_active = true THEN GREATEST(bounty_streak, $4)
+               ELSE $4
+             END,
              bounty_started_at = COALESCE(bounty_started_at, NOW()),
              bounty_server_id = $3
            WHERE uid = $2`,
-          [bountyValue, killerUid, serverId]
+          [bountyValue, killerUid, serverId, newStreak]
         );
       }
     }

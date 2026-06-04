@@ -500,7 +500,7 @@ function HuntCard({ bounties }) {
                     <span className="hu-active-rank">#{String(idx + 1).padStart(2, "0")}</span>
                     <div className="hu-active-person">
                       <strong>{a.nick || "-"}</strong>
-                      <span>{a.streak || 0} kills sem morrer</span>
+                      <span>{a.streak || 0} kills PvP sem morrer para player</span>
                     </div>
                     <div className="hu-active-price">
                       <strong>{formatBRL(a.value || 0)}</strong>
@@ -538,7 +538,7 @@ function HuntCard({ bounties }) {
                     <span className="hu-modal-rank">#{String(idx + 1).padStart(2, "0")}</span>
                     <div className="hu-detail-main">
                       <strong>{a.nick || "-"}</strong>
-                      <span>{a.streak || 0} kills sem morrer</span>
+                      <span>{a.streak || 0} kills PvP sem morrer para player</span>
                     </div>
                     <div className="hu-detail-meta">
                       <span className="hu-pay hu-pay-wait">EM ANDAMENTO</span>

@@ -43,8 +43,6 @@ services:
     image: nginx:alpine
     container_name: brasilz-nginx
     restart: always
-    ports:
-      - "80:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./frontend:/usr/share/nginx/html:ro
@@ -52,6 +50,7 @@ services:
       - api
     networks:
       - brasilz
+      - shared_proxy
 
 volumes:
   pgdata:
@@ -59,3 +58,5 @@ volumes:
 networks:
   brasilz:
     driver: bridge
+  shared_proxy:
+    external: true

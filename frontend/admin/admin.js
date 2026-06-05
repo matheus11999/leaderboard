@@ -24,6 +24,8 @@ const state = {
     timer: null,
     refreshing: false,
   },
+  paymentsTimer: null,
+  paymentsRefreshing: false,
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
@@ -78,6 +80,8 @@ function withServer(path) {
 
 // ---------- screens ----------
 function showLogin() {
+  stopPaymentsRefresh();
+  stopBankModalRefresh();
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('dashboard').classList.add('hidden');
 }
@@ -147,6 +151,8 @@ function switchTab(name, opts = {}) {
   state.current = name;
   for (const btn of document.querySelectorAll('.tab')) btn.classList.toggle('is-active', btn.dataset.tab === name);
   for (const pane of document.querySelectorAll('.tab-pane')) pane.classList.toggle('is-active', pane.id === 'pane-' + name);
+  if (name === 'payments') startPaymentsRefresh();
+  else stopPaymentsRefresh();
   if (opts.force || !state.loaded[name]) refreshTab(name);
 }
 
@@ -160,7 +166,7 @@ async function refreshTab(name) {
       case 'sessions': await loadSessions(); break;
       case 'shop':     await loadShop(); break;
       case 'bounty':   await loadBounty(); break;
-      case 'payments': await loadPayments(); break;
+      case 'payments': await loadPayments(); startPaymentsRefresh(); break;
       case 'admins':   await loadAdmins(); break;
       case 'missions': await loadMissions(); break;
       case 'events':   await loadEvents(); break;
@@ -696,7 +702,7 @@ async function createPayment() {
   }
 }
 
-async function loadPayments() {
+async function loadPayments(opts = {}) {
   const pager = state.pagers.payments;
   const claimed = document.getElementById('payments-claimed').value;
   const search = document.getElementById('payments-search').value.trim();
@@ -730,7 +736,34 @@ async function loadPayments() {
     ]);
     renderPager('payments-pager', 'payments');
   } catch (err) {
-    alert('Erro pagamentos: ' + err.message);
+    if (opts.silent) console.warn('Erro pagamentos:', err.message);
+    else alert('Erro pagamentos: ' + err.message);
+  }
+}
+
+function startPaymentsRefresh() {
+  stopPaymentsRefresh();
+  state.paymentsTimer = setInterval(async () => {
+    if (state.current !== 'payments' || document.getElementById('dashboard')?.classList.contains('hidden')) {
+      stopPaymentsRefresh();
+      return;
+    }
+    if (state.paymentsRefreshing) return;
+    state.paymentsRefreshing = true;
+    try {
+      await loadPayments({ silent: true });
+    } catch (err) {
+      console.warn('Erro ao atualizar pagamentos:', err.message);
+    } finally {
+      state.paymentsRefreshing = false;
+    }
+  }, 30000);
+}
+
+function stopPaymentsRefresh() {
+  if (state.paymentsTimer) {
+    clearInterval(state.paymentsTimer);
+    state.paymentsTimer = null;
   }
 }
 

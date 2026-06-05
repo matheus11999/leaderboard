@@ -916,7 +916,9 @@ function showModal(title, body, buttons) {
   renderModalButtons(buttons);
   document.getElementById('modal').classList.remove('hidden');
 }
-function showHtmlModal(title, bodyHtml, buttons) {
+function showHtmlModal(title, bodyHtml, buttons = [
+  { label: 'FECHAR', kind: 'ghost', onClick: hideModal },
+]) {
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
   renderModalButtons(buttons);

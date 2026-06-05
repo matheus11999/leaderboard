@@ -445,12 +445,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 18px;
   z-index: 100;
 }
 .modal-card {
-  width: min(960px, 92vw);
-  max-width: 92vw;
-  max-height: 80vh;
+  width: min(1040px, 100%);
+  max-width: 100%;
+  max-height: calc(100vh - 36px);
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -481,6 +482,7 @@ body {
 .modal-body {
   padding: 18px;
   overflow: auto;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
@@ -551,10 +553,14 @@ body {
 }
 .bank-server-switch {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 .bank-server-btn {
+  flex: 0 0 auto;
   min-height: 30px;
   padding: 0 12px;
   border: 1px solid var(--border-strong);
@@ -605,4 +611,88 @@ body {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .topbar-r {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .server-switch {
+    max-width: 100%;
+    width: 100%;
+  }
+  .panel {
+    padding: 18px 14px 36px;
+  }
+  .modal {
+    align-items: stretch;
+    padding: 8px;
+  }
+  .modal-card {
+    max-height: calc(100vh - 16px);
+  }
+  .modal-head,
+  .modal-body,
+  .modal-foot {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .modal-head h3 {
+    font-size: 18px;
+    line-height: 1;
+    overflow-wrap: anywhere;
+  }
+  .bank-hero {
+    grid-template-columns: 58px 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+  .bank-hero-art {
+    width: 58px;
+    height: 42px;
+  }
+  .bank-hero-title {
+    font-size: 22px;
+  }
+  .bank-context {
+    padding: 10px;
+  }
+  .bank-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .bank-day-field {
+    width: 100%;
+  }
+  .bank-stats {
+    grid-template-columns: 1fr;
+  }
+  .bank-stats .stat-card-value {
+    font-size: 24px;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-foot {
+    flex-direction: column-reverse;
+  }
+  .modal-foot .btn-ghost,
+  .modal-foot .btn-danger {
+    width: 100%;
+  }
+  .bank-server-btn {
+    min-width: 118px;
+  }
+  .data-table th,
+  .data-table td {
+    padding: 8px 9px;
+  }
 }

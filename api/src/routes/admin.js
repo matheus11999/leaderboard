@@ -643,9 +643,15 @@ router.get('/players/:uid', async (req, res) => {
 router.get('/players/:uid/bank', async (req, res) => {
   const selectedServer = serverFilter(req);
   const limit = clampLimit(req.query.limit, 100, 200);
+  const day = String(req.query.day || '').trim();
   const txParams = [req.params.uid, limit];
   const serverWhere = selectedServer ? `AND server_id = $3` : '';
   if (selectedServer) txParams.push(selectedServer);
+  let dayWhere = '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    txParams.push(day);
+    dayWhere = `AND (occurred_at AT TIME ZONE 'America/Manaus')::date = $${txParams.length}::date`;
+  }
 
   try {
     const playerR = await db.query(
@@ -662,13 +668,24 @@ router.get('/players/:uid/bank', async (req, res) => {
               bank_before, bank_after, cash_balance, total_balance, source
          FROM bank_transactions
         WHERE player_uid = $1
+          AND source <> 'sync_delta'
           ${serverWhere}
+          ${dayWhere}
         ORDER BY occurred_at DESC
         LIMIT $2`,
       txParams
     );
 
-    res.json({ player, transactions: txR.rows });
+    const serverR = selectedServer
+      ? await db.query(`SELECT id, name FROM servers WHERE id = $1`, [selectedServer])
+      : { rows: [] };
+
+    res.json({
+      selected_server: selectedServer,
+      selected_server_name: serverR.rows[0]?.name || selectedServer || null,
+      player,
+      transactions: txR.rows,
+    });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
   }

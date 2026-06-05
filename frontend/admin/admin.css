@@ -362,6 +362,7 @@ body {
 }
 .data-table tbody tr:hover { background: var(--surface-2); }
 .data-table .col-actions { text-align: right; }
+.pill,
 .data-table .pill {
   display: inline-block;
   padding: 2px 8px;
@@ -370,8 +371,11 @@ body {
   background: var(--surface-3);
   color: var(--text);
 }
+.pill.is-ok,
 .data-table .pill.is-ok    { color: var(--ok);      background: rgba(74, 222, 128, 0.1); }
+.pill.is-warn,
 .data-table .pill.is-warn  { color: var(--warn);    background: rgba(224, 144, 48, 0.1); }
+.pill.is-err,
 .data-table .pill.is-err   { color: var(--primary); background: var(--primary-soft); }
 
 .row-btn {
@@ -444,7 +448,7 @@ body {
   z-index: 100;
 }
 .modal-card {
-  width: 560px;
+  width: min(960px, 92vw);
   max-width: 92vw;
   max-height: 80vh;
   display: flex;
@@ -480,7 +484,7 @@ body {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-muted);
-  white-space: pre-wrap;
+  white-space: normal;
   word-break: break-word;
 }
 .modal-foot {
@@ -489,4 +493,62 @@ body {
   gap: 10px;
   padding: 14px 18px;
   border-top: 1px solid var(--border);
+}
+
+.bank-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.bank-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+.bank-context-note {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.bank-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.bank-day-field {
+  width: 210px;
+}
+.bank-day-field input {
+  color-scheme: dark;
+}
+.bank-stats {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin-bottom: 14px;
+}
+.bank-stats .stat-card {
+  padding: 14px;
+}
+.bank-stats .stat-card-value {
+  font-size: 28px;
+  line-height: 1;
+}
+.bank-card-main {
+  border-color: rgba(74, 222, 128, 0.35);
+}
+.bank-time {
+  color: var(--text);
+  white-space: nowrap;
+}
+.bank-relative {
+  margin-top: 2px;
+  color: var(--warn);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

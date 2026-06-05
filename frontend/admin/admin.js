@@ -253,11 +253,18 @@ async function banPlayer(uid, ban) {
   } catch (err) { alert('Falha ban: ' + err.message); }
 }
 
-async function showBankModal(uid) {
+async function showBankModal(uid, day = '') {
   try {
-    const d = await api('GET', withServer('/players/' + encodeURIComponent(uid) + '/bank?limit=100'));
+    const q = new URLSearchParams({ limit: '100' });
+    if (day) q.set('day', day);
+    const d = await api('GET', withServer('/players/' + encodeURIComponent(uid) + '/bank?' + q));
     const p = d.player || {};
     const rows = d.transactions || [];
+    const serverName = d.selected_server_name || getSelectedServerName();
+    const latestTx = rows[0] || null;
+    const latestTxTotal = latestTx?.total_balance ?? null;
+    const latestTxCash = latestTx?.cash_balance ?? null;
+    const lastTxLabel = latestTx ? `${fmtDate(latestTx.occurred_at)} (${fmtRelative(latestTx.occurred_at)})` : 'Sem transacao';
     const txHtml = rows.length ? rows.map(tx => {
       const isDeposit = tx.transaction_type === 'deposit';
       const type = isDeposit ? 'DEPOSITO' : 'RETIRADA';
@@ -265,28 +272,58 @@ async function showBankModal(uid) {
       const cls = isDeposit ? 'is-ok' : 'is-warn';
       return `
         <tr>
-          <td>${fmtDate(tx.occurred_at)}</td>
+          <td>
+            <div class="bank-time">${fmtDate(tx.occurred_at)}</div>
+            <div class="bank-relative">${fmtRelative(tx.occurred_at)}</div>
+          </td>
           <td><span class="pill ${cls}">${type}</span></td>
           <td>${sign}${formatBRL(tx.amount || 0)}</td>
           <td>${formatBRL(tx.bank_before || 0)} -> ${formatBRL(tx.bank_after || 0)}</td>
           <td>${tx.cash_balance == null ? '&mdash;' : formatBRL(tx.cash_balance)}</td>
+          <td>${tx.total_balance == null ? '&mdash;' : formatBRL(tx.total_balance)}</td>
         </tr>
       `;
-    }).join('') : '<tr><td colspan="5"><div class="table-state">Sem transacoes registradas ainda.</div></td></tr>';
+    }).join('') : '<tr><td colspan="6"><div class="table-state">Sem transacoes reais neste servidor/data.</div></td></tr>';
 
     showHtmlModal('Banco - ' + (p.name || uid), `
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-card-label">BANCO</div>
+      <div class="bank-modal">
+        <div class="bank-context">
+          <span class="pill is-warn">SERVIDOR: ${escapeHtml(serverName || state.selectedServer)}</span>
+          <span class="bank-context-note">O saldo do jogador e global por UID; o extrato abaixo e filtrado pelo servidor selecionado.</span>
+        </div>
+        <div class="bank-toolbar">
+          <label class="field bank-day-field">
+            <span class="field-label">FILTRAR POR DIA</span>
+            <input id="bank-day-filter" type="date" value="${escapeHtml(day)}">
+          </label>
+          <button type="button" id="bank-clear-day" class="btn-ghost">TODOS OS DIAS</button>
+        </div>
+      </div>
+      <div class="stats-grid bank-stats">
+        <div class="stat-card bank-card-main">
+          <div class="stat-card-label">BANCO ATUAL</div>
           <div class="stat-card-value">${formatBRL(p.bank_balance || 0)}</div>
+          <div class="stat-card-foot">ultimo dado recebido do jogo</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">INVENTARIO</div>
+          <div class="stat-card-label">INVENTARIO ATUAL</div>
           <div class="stat-card-value">${formatBRL(p.current_balance || 0)}</div>
+          <div class="stat-card-foot">global do jogador no portal</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">ULTIMO SYNC</div>
+          <div class="stat-card-label">INV. ULTIMA TRANSACAO</div>
+          <div class="stat-card-value">${latestTxCash == null ? '—' : formatBRL(latestTxCash)}</div>
+          <div class="stat-card-foot">${escapeHtml(lastTxLabel)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">TOTAL ULT. TRANSACAO</div>
+          <div class="stat-card-value">${latestTxTotal == null ? '—' : formatBRL(latestTxTotal)}</div>
+          <div class="stat-card-foot">banco + inventario naquele momento</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">ULTIMA ATUALIZACAO</div>
           <div class="stat-card-value">${p.bank_last_seen ? fmtDate(p.bank_last_seen) : 'Sem sync'}</div>
+          <div class="stat-card-foot">${p.bank_last_seen ? fmtRelative(p.bank_last_seen) : ''}</div>
         </div>
       </div>
       <div class="table-wrap">
@@ -298,6 +335,7 @@ async function showBankModal(uid) {
               <th>VALOR</th>
               <th>SALDO BANCO</th>
               <th>INVENTARIO</th>
+              <th>TOTAL</th>
             </tr>
           </thead>
           <tbody>${txHtml}</tbody>
@@ -306,6 +344,12 @@ async function showBankModal(uid) {
     `, [
       { label: 'FECHAR', kind: 'ghost', onClick: hideModal },
     ]);
+    document.getElementById('bank-day-filter')?.addEventListener('change', (ev) => {
+      showBankModal(uid, ev.target.value || '');
+    });
+    document.getElementById('bank-clear-day')?.addEventListener('click', () => {
+      showBankModal(uid, '');
+    });
   } catch (err) {
     alert('Erro banco: ' + err.message);
   }
@@ -892,6 +936,21 @@ function fmtDate(s) {
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleString('pt-BR', { hour12: false });
 }
+function fmtRelative(s) {
+  if (!s) return 'agora';
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return 'agora';
+  const diff = Math.max(0, Date.now() - d.getTime());
+  const sec = Math.floor(diff / 1000);
+  const min = Math.floor(sec / 60);
+  const hours = Math.floor(min / 60);
+  const days = Math.floor(hours / 24);
+  if (sec < 45) return 'agora mesmo';
+  if (min < 60) return `${min} min atras`;
+  if (hours < 24) return `${hours}h atras`;
+  if (days < 30) return `${days}d atras`;
+  return fmtDate(s);
+}
 function fmtSeconds(s) {
   const n = Number(s) || 0;
   if (n <= 0) return '—';
@@ -910,6 +969,10 @@ function formatUptime(s) {
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+}
+function getSelectedServerName() {
+  const server = state.servers.find(s => s.id === state.selectedServer);
+  return server?.name || state.selectedServer;
 }
 
 // ---------- bootstrap ----------

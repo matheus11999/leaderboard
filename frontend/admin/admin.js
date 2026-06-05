@@ -253,23 +253,26 @@ async function banPlayer(uid, ban) {
   } catch (err) { alert('Falha ban: ' + err.message); }
 }
 
-async function showBankModal(uid, day = '') {
+async function showBankModal(uid, day = '', serverId = state.selectedServer) {
   try {
     const q = new URLSearchParams({ limit: '100' });
     if (day) q.set('day', day);
-    const d = await api('GET', withServer('/players/' + encodeURIComponent(uid) + '/bank?' + q));
+    q.set('server_id', serverId || state.selectedServer);
+    const d = await api('GET', '/players/' + encodeURIComponent(uid) + '/bank?' + q);
     const p = d.player || {};
     const rows = d.transactions || [];
-    const serverName = d.selected_server_name || getSelectedServerName();
-    const latestTx = rows[0] || null;
-    const latestTxTotal = latestTx?.total_balance ?? null;
-    const latestTxCash = latestTx?.cash_balance ?? null;
-    const lastTxLabel = latestTx ? `${fmtDate(latestTx.occurred_at)} (${fmtRelative(latestTx.occurred_at)})` : 'Sem transacao';
+    const selectedBankServer = d.selected_server || serverId || state.selectedServer;
+    const serverName = d.selected_server_name || getServerName(selectedBankServer);
+    const serverSwitchHtml = state.servers.map((s) => {
+      const active = s.id === selectedBankServer;
+      return `<button type="button" class="bank-server-btn ${active ? 'is-active' : ''}" data-bank-server="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</button>`;
+    }).join('');
     const txHtml = rows.length ? rows.map(tx => {
       const isDeposit = tx.transaction_type === 'deposit';
-      const type = isDeposit ? 'DEPOSITO' : 'RETIRADA';
-      const sign = isDeposit ? '+' : '-';
-      const cls = isDeposit ? 'is-ok' : 'is-warn';
+      const isPortal = tx.transaction_type === 'portal_payment';
+      const type = isPortal ? 'PAGAMENTO PORTAL' : (isDeposit ? 'DEPOSITO' : 'RETIRADA');
+      const sign = isDeposit || isPortal ? '+' : '-';
+      const cls = isPortal ? 'is-ok' : (isDeposit ? 'is-ok' : 'is-warn');
       return `
         <tr>
           <td>
@@ -278,7 +281,7 @@ async function showBankModal(uid, day = '') {
           </td>
           <td><span class="pill ${cls}">${type}</span></td>
           <td>${sign}${formatBRL(tx.amount || 0)}</td>
-          <td>${formatBRL(tx.bank_before || 0)} -> ${formatBRL(tx.bank_after || 0)}</td>
+          <td>${isPortal ? formatBRL(tx.bank_after || tx.bank_before || 0) : `${formatBRL(tx.bank_before || 0)} -> ${formatBRL(tx.bank_after || 0)}`}</td>
           <td>${tx.cash_balance == null ? '&mdash;' : formatBRL(tx.cash_balance)}</td>
           <td>${tx.total_balance == null ? '&mdash;' : formatBRL(tx.total_balance)}</td>
         </tr>
@@ -289,8 +292,9 @@ async function showBankModal(uid, day = '') {
       <div class="bank-modal">
         <div class="bank-context">
           <span class="pill is-warn">SERVIDOR: ${escapeHtml(serverName || state.selectedServer)}</span>
-          <span class="bank-context-note">O saldo do jogador e global por UID; o extrato abaixo e filtrado pelo servidor selecionado.</span>
+          <span class="bank-context-note">Este extrato esta filtrado por servidor. Use os botoes abaixo se o mesmo jogador tambem joga em outro servidor.</span>
         </div>
+        <div class="bank-server-switch">${serverSwitchHtml}</div>
         <div class="bank-toolbar">
           <label class="field bank-day-field">
             <span class="field-label">FILTRAR POR DIA</span>
@@ -308,17 +312,7 @@ async function showBankModal(uid, day = '') {
         <div class="stat-card">
           <div class="stat-card-label">INVENTARIO ATUAL</div>
           <div class="stat-card-value">${formatBRL(p.current_balance || 0)}</div>
-          <div class="stat-card-foot">global do jogador no portal</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-label">INV. ULTIMA TRANSACAO</div>
-          <div class="stat-card-value">${latestTxCash == null ? '—' : formatBRL(latestTxCash)}</div>
-          <div class="stat-card-foot">${escapeHtml(lastTxLabel)}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-card-label">TOTAL ULT. TRANSACAO</div>
-          <div class="stat-card-value">${latestTxTotal == null ? '—' : formatBRL(latestTxTotal)}</div>
-          <div class="stat-card-foot">banco + inventario naquele momento</div>
+          <div class="stat-card-foot">ultimo valor Bank2 recebido do jogo</div>
         </div>
         <div class="stat-card">
           <div class="stat-card-label">ULTIMA ATUALIZACAO</div>
@@ -345,11 +339,14 @@ async function showBankModal(uid, day = '') {
       { label: 'FECHAR', kind: 'ghost', onClick: hideModal },
     ]);
     document.getElementById('bank-day-filter')?.addEventListener('change', (ev) => {
-      showBankModal(uid, ev.target.value || '');
+      showBankModal(uid, ev.target.value || '', selectedBankServer);
     });
     document.getElementById('bank-clear-day')?.addEventListener('click', () => {
-      showBankModal(uid, '');
+      showBankModal(uid, '', selectedBankServer);
     });
+    for (const btn of document.querySelectorAll('[data-bank-server]')) {
+      btn.addEventListener('click', () => showBankModal(uid, day, btn.dataset.bankServer || selectedBankServer));
+    }
   } catch (err) {
     alert('Erro banco: ' + err.message);
   }
@@ -971,8 +968,11 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
 }
 function getSelectedServerName() {
-  const server = state.servers.find(s => s.id === state.selectedServer);
-  return server?.name || state.selectedServer;
+  return getServerName(state.selectedServer);
+}
+function getServerName(serverId) {
+  const server = state.servers.find(s => s.id === serverId);
+  return server?.name || serverId;
 }
 
 // ---------- bootstrap ----------

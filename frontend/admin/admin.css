@@ -521,6 +521,32 @@ body {
   align-items: flex-end;
   gap: 10px;
 }
+.bank-server-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bank-server-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-2);
+  color: var(--text-muted);
+  font-family: var(--font-cond);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.bank-server-btn.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+.bank-server-btn:not(.is-active):hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+}
 .bank-day-field {
   width: 210px;
 }

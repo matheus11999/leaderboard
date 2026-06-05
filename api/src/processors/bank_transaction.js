@@ -10,7 +10,7 @@ module.exports = async function (data, envelope = {}) {
 
   const serverId = normalizeServerId(envelope.server_id || data.server_id);
   const type = String(data.transaction_type || '').toLowerCase();
-  if (!['deposit', 'withdraw'].includes(type)) return;
+  if (!['deposit', 'withdraw', 'portal_payment'].includes(type)) return;
 
   const amount = Math.max(0, Math.round(Number(data.amount) || 0));
   const bankBefore = Math.max(0, Math.round(Number(data.bank_before) || 0));
@@ -20,7 +20,8 @@ module.exports = async function (data, envelope = {}) {
   const cashBalance = Number.isFinite(cashBalanceRaw) ? Math.max(0, Math.round(cashBalanceRaw)) : null;
   const totalBalance = Number.isFinite(totalBalanceRaw) ? Math.max(0, Math.round(totalBalanceRaw)) : null;
   const finalAmount = amount > 0 ? amount : Math.abs(bankAfter - bankBefore);
-  if (finalAmount <= 0 || bankBefore === bankAfter) return;
+  if (finalAmount <= 0) return;
+  if (type !== 'portal_payment' && bankBefore === bankAfter) return;
 
   await db.tx(async (c) => {
     await c.query(
@@ -39,7 +40,7 @@ module.exports = async function (data, envelope = {}) {
       `INSERT INTO bank_transactions (
          server_id, player_uid, player_name, transaction_type, amount,
          bank_before, bank_after, cash_balance, total_balance, source
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'atm')`,
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         serverId,
         player.uid,
@@ -50,6 +51,7 @@ module.exports = async function (data, envelope = {}) {
         bankAfter,
         cashBalance,
         totalBalance,
+        type === 'portal_payment' ? 'portal' : 'atm',
       ]
     );
 

@@ -38,7 +38,7 @@ async function ensureSchema() {
        server_id TEXT NOT NULL DEFAULT 'brasilz-main',
        player_uid TEXT REFERENCES players(uid) ON DELETE CASCADE,
        player_name TEXT NOT NULL DEFAULT 'Unknown',
-       transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw')),
+       transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit', 'withdraw', 'portal_payment')),
        amount INT NOT NULL CHECK (amount > 0),
        bank_before INT NOT NULL DEFAULT 0,
        bank_after INT NOT NULL DEFAULT 0,
@@ -46,6 +46,8 @@ async function ensureSchema() {
        total_balance INT,
        source TEXT NOT NULL DEFAULT 'sync_delta'
      )`,
+    `ALTER TABLE bank_transactions DROP CONSTRAINT IF EXISTS bank_transactions_transaction_type_check`,
+    `ALTER TABLE bank_transactions ADD CONSTRAINT bank_transactions_transaction_type_check CHECK (transaction_type IN ('deposit', 'withdraw', 'portal_payment'))`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS life_started_at TIMESTAMPTZ`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS life_server_id TEXT`,
     `CREATE TABLE IF NOT EXISTS bounty_settings (

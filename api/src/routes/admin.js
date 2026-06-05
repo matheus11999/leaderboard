@@ -352,6 +352,55 @@ router.get('/overview', async (req, res) => {
 });
 
 // -------------------------------------------------------------------
+// Bank balances
+// -------------------------------------------------------------------
+router.get('/bank', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 500);
+  const offset = clampOffset(req.query.offset);
+  const search = ilikePattern(req.query.search);
+  const selectedServer = serverFilter(req);
+
+  const conds = [];
+  const filterParams = [];
+  if (search) {
+    filterParams.push(search);
+    conds.push(`(p.name ILIKE $${filterParams.length} OR p.uid ILIKE $${filterParams.length})`);
+  }
+  if (selectedServer) {
+    filterParams.push(selectedServer);
+    conds.push(`EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = p.uid AND s.server_id = $${filterParams.length})`);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const rowsParams = [...filterParams, limit, offset];
+  const limitIdx = filterParams.length + 1;
+  const offsetIdx = filterParams.length + 2;
+
+  try {
+    const rowsR = await db.query(
+      `SELECT p.uid, p.name, p.last_seen, p.current_balance, p.bank_balance, p.bank_last_seen
+         FROM players p
+         ${where}
+        ORDER BY p.bank_balance DESC, p.bank_last_seen DESC NULLS LAST, p.name ASC
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      rowsParams
+    );
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM players p ${where}`, filterParams);
+    const summaryR = await db.query(
+      `SELECT COALESCE(SUM(p.bank_balance), 0)::BIGINT AS total_bank,
+              COUNT(*)::INT AS with_bank,
+              COUNT(*) FILTER (WHERE p.bank_balance <> 0)::INT AS nonzero_bank,
+              MAX(p.bank_last_seen) AS latest_bank_sync
+         FROM players p
+         ${where}`,
+      filterParams
+    );
+    res.json({ total: countR.rows[0].n, summary: summaryR.rows[0], rows: rowsR.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+// -------------------------------------------------------------------
 // Bounty settings and reward queue
 // -------------------------------------------------------------------
 router.get('/bounty/settings', async (_req, res) => {

@@ -20,6 +20,7 @@ const state = {
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
+    bank:     { offset: 0, limit: 50, total: 0 },
     kills:    { offset: 0, limit: 50, total: 0 },
     sessions: { offset: 0, limit: 50, total: 0 },
     shop:     { offset: 0, limit: 50, total: 0 },
@@ -149,6 +150,7 @@ async function refreshTab(name) {
       case 'overview': await loadOverview(); break;
       case 'servers':  await loadServers(); break;
       case 'players':  await loadPlayers(); break;
+      case 'bank':     await loadBank(); break;
       case 'kills':    await loadKills(); break;
       case 'sessions': await loadSessions(); break;
       case 'shop':     await loadShop(); break;
@@ -250,6 +252,41 @@ async function banPlayer(uid, ban) {
     await api('POST', '/players/' + encodeURIComponent(uid) + '/ban', { ban });
     loadPlayers();
   } catch (err) { alert('Falha ban: ' + err.message); }
+}
+
+// ---------- bank ----------
+async function loadBank() {
+  const pager = state.pagers.bank;
+  const search = document.getElementById('bank-search').value.trim();
+  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+  if (search) q.set('search', search);
+  try {
+    const d = await api('GET', withServer('/bank?' + q));
+    pager.total = d.total;
+    const stats = [
+      { label: 'TOTAL NO BANCO', value: formatBRL(d.summary?.total_bank || 0) },
+      { label: 'JOGADORES COM BANCO', value: d.summary?.with_bank || 0 },
+      { label: 'COM SALDO', value: d.summary?.nonzero_bank || 0 },
+      { label: 'ULTIMO SYNC', value: d.summary?.latest_bank_sync ? fmtDate(d.summary.latest_bank_sync) : 'Sem sync' },
+    ];
+    document.getElementById('bank-stats').innerHTML = stats.map(c => `
+      <div class="stat-card">
+        <div class="stat-card-label">${c.label}</div>
+        <div class="stat-card-value">${c.value}</div>
+      </div>
+    `).join('');
+    renderTable('bank-table', [
+      { key: 'uid', label: 'UID' },
+      { key: 'name', label: 'NOME' },
+      { key: 'bank_balance', label: 'BANCO', render: v => formatBRL(v || 0) },
+      { key: 'current_balance', label: 'INVENTARIO', render: v => formatBRL(v || 0) },
+      { key: 'bank_last_seen', label: 'ULTIMO SYNC', render: v => v ? fmtDate(v) : 'Sem sync' },
+      { key: 'last_seen', label: 'ULTIMA VEZ', render: v => fmtDate(v) },
+    ], d.rows);
+    renderPager('bank-pager', 'bank');
+  } catch (err) {
+    alert('Erro banco: ' + err.message);
+  }
 }
 
 // ---------- kills ----------
@@ -859,7 +896,7 @@ function bindUI() {
     });
   }
   // Search filters refresh on Enter or change.
-  for (const id of ['players-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
+  for (const id of ['players-search', 'bank-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
     document.getElementById(id).addEventListener('change', () => {
       state.pagers[state.current].offset = 0;
       reloadTab(state.current);

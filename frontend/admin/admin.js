@@ -20,7 +20,6 @@ const state = {
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
-    bank:     { offset: 0, limit: 50, total: 0 },
     kills:    { offset: 0, limit: 50, total: 0 },
     sessions: { offset: 0, limit: 50, total: 0 },
     shop:     { offset: 0, limit: 50, total: 0 },
@@ -150,7 +149,6 @@ async function refreshTab(name) {
       case 'overview': await loadOverview(); break;
       case 'servers':  await loadServers(); break;
       case 'players':  await loadPlayers(); break;
-      case 'bank':     await loadBank(); break;
       case 'kills':    await loadKills(); break;
       case 'sessions': await loadSessions(); break;
       case 'shop':     await loadShop(); break;
@@ -238,6 +236,7 @@ async function loadPlayers() {
       { key: 'bank_balance', label: 'BANCO', render: v => formatBRL(v || 0) },
       { key: 'is_banned', label: 'BAN', render: v => v ? '<span class="pill is-err">BANIDO</span>' : '<span class="pill is-ok">OK</span>' },
     ], d.rows, [
+      { label: 'BANCO', kind: 'warn', onClick: r => showBankModal(r.uid) },
       { label: 'BAN', kind: 'warn', onClick: r => banPlayer(r.uid, !r.is_banned) },
       { label: 'DEL', kind: 'danger', onClick: r => confirmDelete('jogador ' + r.name, () => apiDelete('/players/' + encodeURIComponent(r.uid), 'players')) },
     ]);
@@ -254,36 +253,59 @@ async function banPlayer(uid, ban) {
   } catch (err) { alert('Falha ban: ' + err.message); }
 }
 
-// ---------- bank ----------
-async function loadBank() {
-  const pager = state.pagers.bank;
-  const search = document.getElementById('bank-search').value.trim();
-  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
-  if (search) q.set('search', search);
+async function showBankModal(uid) {
   try {
-    const d = await api('GET', withServer('/bank?' + q));
-    pager.total = d.total;
-    const stats = [
-      { label: 'TOTAL NO BANCO', value: formatBRL(d.summary?.total_bank || 0) },
-      { label: 'JOGADORES COM BANCO', value: d.summary?.with_bank || 0 },
-      { label: 'COM SALDO', value: d.summary?.nonzero_bank || 0 },
-      { label: 'ULTIMO SYNC', value: d.summary?.latest_bank_sync ? fmtDate(d.summary.latest_bank_sync) : 'Sem sync' },
-    ];
-    document.getElementById('bank-stats').innerHTML = stats.map(c => `
-      <div class="stat-card">
-        <div class="stat-card-label">${c.label}</div>
-        <div class="stat-card-value">${c.value}</div>
+    const d = await api('GET', withServer('/players/' + encodeURIComponent(uid) + '/bank?limit=100'));
+    const p = d.player || {};
+    const rows = d.transactions || [];
+    const txHtml = rows.length ? rows.map(tx => {
+      const isDeposit = tx.transaction_type === 'deposit';
+      const type = isDeposit ? 'DEPOSITO' : 'RETIRADA';
+      const sign = isDeposit ? '+' : '-';
+      const cls = isDeposit ? 'is-ok' : 'is-warn';
+      return `
+        <tr>
+          <td>${fmtDate(tx.occurred_at)}</td>
+          <td><span class="pill ${cls}">${type}</span></td>
+          <td>${sign}${formatBRL(tx.amount || 0)}</td>
+          <td>${formatBRL(tx.bank_before || 0)} -> ${formatBRL(tx.bank_after || 0)}</td>
+          <td>${tx.cash_balance == null ? '&mdash;' : formatBRL(tx.cash_balance)}</td>
+        </tr>
+      `;
+    }).join('') : '<tr><td colspan="5"><div class="table-state">Sem transacoes registradas ainda.</div></td></tr>';
+
+    showHtmlModal('Banco - ' + (p.name || uid), `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-label">BANCO</div>
+          <div class="stat-card-value">${formatBRL(p.bank_balance || 0)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">INVENTARIO</div>
+          <div class="stat-card-value">${formatBRL(p.current_balance || 0)}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-label">ULTIMO SYNC</div>
+          <div class="stat-card-value">${p.bank_last_seen ? fmtDate(p.bank_last_seen) : 'Sem sync'}</div>
+        </div>
       </div>
-    `).join('');
-    renderTable('bank-table', [
-      { key: 'uid', label: 'UID' },
-      { key: 'name', label: 'NOME' },
-      { key: 'bank_balance', label: 'BANCO', render: v => formatBRL(v || 0) },
-      { key: 'current_balance', label: 'INVENTARIO', render: v => formatBRL(v || 0) },
-      { key: 'bank_last_seen', label: 'ULTIMO SYNC', render: v => v ? fmtDate(v) : 'Sem sync' },
-      { key: 'last_seen', label: 'ULTIMA VEZ', render: v => fmtDate(v) },
-    ], d.rows);
-    renderPager('bank-pager', 'bank');
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>HORARIO</th>
+              <th>TIPO</th>
+              <th>VALOR</th>
+              <th>SALDO BANCO</th>
+              <th>INVENTARIO</th>
+            </tr>
+          </thead>
+          <tbody>${txHtml}</tbody>
+        </table>
+      </div>
+    `, [
+      { label: 'FECHAR', kind: 'ghost', onClick: hideModal },
+    ]);
   } catch (err) {
     alert('Erro banco: ' + err.message);
   }
@@ -841,6 +863,16 @@ function showJson(title, data) {
 function showModal(title, body, buttons) {
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').textContent = body;
+  renderModalButtons(buttons);
+  document.getElementById('modal').classList.remove('hidden');
+}
+function showHtmlModal(title, bodyHtml, buttons) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  renderModalButtons(buttons);
+  document.getElementById('modal').classList.remove('hidden');
+}
+function renderModalButtons(buttons) {
   const foot = document.getElementById('modal-foot');
   foot.innerHTML = '';
   for (const b of buttons) {
@@ -850,7 +882,6 @@ function showModal(title, body, buttons) {
     btn.addEventListener('click', b.onClick);
     foot.appendChild(btn);
   }
-  document.getElementById('modal').classList.remove('hidden');
 }
 function hideModal() { document.getElementById('modal').classList.add('hidden'); }
 
@@ -896,7 +927,7 @@ function bindUI() {
     });
   }
   // Search filters refresh on Enter or change.
-  for (const id of ['players-search', 'bank-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
+  for (const id of ['players-search', 'kills-search', 'shop-search', 'payments-search', 'missions-search']) {
     document.getElementById(id).addEventListener('change', () => {
       state.pagers[state.current].offset = 0;
       reloadTab(state.current);

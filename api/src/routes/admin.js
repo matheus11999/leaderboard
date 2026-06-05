@@ -352,55 +352,6 @@ router.get('/overview', async (req, res) => {
 });
 
 // -------------------------------------------------------------------
-// Bank balances
-// -------------------------------------------------------------------
-router.get('/bank', async (req, res) => {
-  const limit = clampLimit(req.query.limit, 50, 500);
-  const offset = clampOffset(req.query.offset);
-  const search = ilikePattern(req.query.search);
-  const selectedServer = serverFilter(req);
-
-  const conds = [];
-  const filterParams = [];
-  if (search) {
-    filterParams.push(search);
-    conds.push(`(p.name ILIKE $${filterParams.length} OR p.uid ILIKE $${filterParams.length})`);
-  }
-  if (selectedServer) {
-    filterParams.push(selectedServer);
-    conds.push(`EXISTS (SELECT 1 FROM sessions s WHERE s.player_uid = p.uid AND s.server_id = $${filterParams.length})`);
-  }
-  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
-  const rowsParams = [...filterParams, limit, offset];
-  const limitIdx = filterParams.length + 1;
-  const offsetIdx = filterParams.length + 2;
-
-  try {
-    const rowsR = await db.query(
-      `SELECT p.uid, p.name, p.last_seen, p.current_balance, p.bank_balance, p.bank_last_seen
-         FROM players p
-         ${where}
-        ORDER BY p.bank_balance DESC, p.bank_last_seen DESC NULLS LAST, p.name ASC
-        LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-      rowsParams
-    );
-    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM players p ${where}`, filterParams);
-    const summaryR = await db.query(
-      `SELECT COALESCE(SUM(p.bank_balance), 0)::BIGINT AS total_bank,
-              COUNT(*)::INT AS with_bank,
-              COUNT(*) FILTER (WHERE p.bank_balance <> 0)::INT AS nonzero_bank,
-              MAX(p.bank_last_seen) AS latest_bank_sync
-         FROM players p
-         ${where}`,
-      filterParams
-    );
-    res.json({ total: countR.rows[0].n, summary: summaryR.rows[0], rows: rowsR.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'query failed', message: err.message });
-  }
-});
-
-// -------------------------------------------------------------------
 // Bounty settings and reward queue
 // -------------------------------------------------------------------
 router.get('/bounty/settings', async (_req, res) => {
@@ -684,6 +635,40 @@ router.get('/players/:uid', async (req, res) => {
     const r = await db.query(`SELECT * FROM players WHERE uid = $1`, [req.params.uid]);
     if (!r.rows[0]) return res.status(404).json({ error: 'not found' });
     res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.get('/players/:uid/bank', async (req, res) => {
+  const selectedServer = serverFilter(req);
+  const limit = clampLimit(req.query.limit, 100, 200);
+  const txParams = [req.params.uid, limit];
+  const serverWhere = selectedServer ? `AND server_id = $3` : '';
+  if (selectedServer) txParams.push(selectedServer);
+
+  try {
+    const playerR = await db.query(
+      `SELECT uid, name, current_balance, bank_balance, bank_last_seen, last_seen
+         FROM players
+        WHERE uid = $1`,
+      [req.params.uid]
+    );
+    const player = playerR.rows[0];
+    if (!player) return res.status(404).json({ error: 'not found' });
+
+    const txR = await db.query(
+      `SELECT id, occurred_at, server_id, transaction_type, amount,
+              bank_before, bank_after, cash_balance, total_balance, source
+         FROM bank_transactions
+        WHERE player_uid = $1
+          ${serverWhere}
+        ORDER BY occurred_at DESC
+        LIMIT $2`,
+      txParams
+    );
+
+    res.json({ player, transactions: txR.rows });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });
   }

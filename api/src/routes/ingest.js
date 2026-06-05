@@ -12,6 +12,7 @@ const playerSpawned      = require('../processors/player_spawned');
 const playerKilled       = require('../processors/player_killed');
 const npcKilled          = require('../processors/npc_killed');
 const playerHeartbeat    = require('../processors/player_heartbeat');
+const playerBankSync     = require('../processors/player_bank_sync');
 const shopEvent          = require('../processors/shop_event');
 const missionEvent       = require('../processors/mission_event');
 
@@ -21,6 +22,7 @@ const PROCESSORS = {
   player_spawned:      playerSpawned,
   player_heartbeat:    playerHeartbeat,
   heartbeat:           playerHeartbeat,
+  player_bank_sync:    playerBankSync,
   player_killed:       playerKilled,
   npc_killed:          npcKilled,
   shop_purchase:        shopEvent,

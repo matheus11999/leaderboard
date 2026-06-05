@@ -30,6 +30,8 @@ async function ensureSchema() {
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_streak INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_started_at TIMESTAMPTZ`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_server_id TEXT`,
+    `ALTER TABLE players ADD COLUMN IF NOT EXISTS bank_balance INT NOT NULL DEFAULT 0`,
+    `ALTER TABLE players ADD COLUMN IF NOT EXISTS bank_last_seen TIMESTAMPTZ`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS life_started_at TIMESTAMPTZ`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS life_server_id TEXT`,
     `CREATE TABLE IF NOT EXISTS bounty_settings (
@@ -113,6 +115,7 @@ async function ensureSchema() {
     `CREATE INDEX IF NOT EXISTS idx_players_current_kill_streak ON players (current_kill_streak DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_players_best_kill_streak ON players (best_kill_streak DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_players_life_started ON players (life_server_id, life_started_at) WHERE life_started_at IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_players_bank_balance ON players (bank_balance DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_occurred_at ON bounty_events (occurred_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_pending ON bounty_events (server_id, occurred_at) WHERE claimed = false`,
     `CREATE INDEX IF NOT EXISTS idx_bounty_events_hunter_uid ON bounty_events (hunter_uid) WHERE hunter_uid IS NOT NULL`,

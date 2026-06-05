@@ -459,7 +459,7 @@ router.get('/payments/players', async (req, res) => {
 
   try {
     const r = await db.query(
-      `SELECT p.uid, p.name, p.last_seen, p.current_balance,
+      `SELECT p.uid, p.name, p.last_seen, p.current_balance, p.bank_balance, p.bank_last_seen,
               ps.server_id,
               COALESCE(ps.last_seen, ps.connected_at) AS session_last_seen,
               (${onlineSql('ps', '$2')}) AS online
@@ -616,7 +616,7 @@ router.get('/players', async (req, res) => {
       `SELECT uid, name, first_seen, last_seen, total_kills, total_deaths,
               deaths_pvp, deaths_zombie, deaths_bandit, deaths_env, deaths_suicide,
               longest_shot_m, longest_life_s, current_kill_streak, best_kill_streak,
-              bounty_active, bounty_value, total_playtime_s, current_balance, is_banned
+              bounty_active, bounty_value, total_playtime_s, current_balance, bank_balance, bank_last_seen, is_banned
          FROM players
          ${where}
         ORDER BY last_seen DESC

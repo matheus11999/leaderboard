@@ -233,6 +233,7 @@ async function loadPlayers() {
       { key: 'longest_shot_m', label: 'TIRO MAX (m)', render: v => Math.round(Number(v) || 0) },
       { key: 'longest_life_s', label: 'VIDA MAX', render: v => fmtSeconds(v) },
       { key: 'total_playtime_s', label: 'JOGADO', render: v => fmtSeconds(v) },
+      { key: 'bank_balance', label: 'BANCO', render: v => formatBRL(v || 0) },
       { key: 'is_banned', label: 'BAN', render: v => v ? '<span class="pill is-err">BANIDO</span>' : '<span class="pill is-ok">OK</span>' },
     ], d.rows, [
       { label: 'BAN', kind: 'warn', onClick: r => banPlayer(r.uid, !r.is_banned) },
@@ -499,8 +500,9 @@ async function loadPaymentPlayers() {
       const uid = escapeHtml(p.uid || '');
       const seen = (p.session_last_seen || p.last_seen) ? fmtDate(p.session_last_seen || p.last_seen) : 'sem data';
       const status = p.online ? 'ONLINE' : 'OFFLINE';
-      const balance = p.current_balance != null ? ' | ' + formatBRL(p.current_balance) : '';
-      return `<option value="${uid}">${name} | ${status} | ${uid.slice(0, 8)} | ${seen}${balance}</option>`;
+      const cash = p.current_balance != null ? ' | inv ' + formatBRL(p.current_balance) : '';
+      const bank = p.bank_balance != null ? ' | banco ' + formatBRL(p.bank_balance) : '';
+      return `<option value="${uid}">${name} | ${status} | ${uid.slice(0, 8)} | ${seen}${cash}${bank}</option>`;
     }).join('');
   } catch (err) {
     select.innerHTML = '<option value="">Erro ao carregar jogadores</option>';

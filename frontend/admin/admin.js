@@ -298,12 +298,10 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
           <img src="/admin/assets/money-ledger.svg" alt="" class="bank-hero-art">
           <div>
             <div class="bank-hero-title">Extrato Bank2</div>
-            <div class="bank-hero-sub">Dados separados por servidor para evitar misturar saldos do mesmo jogador.</div>
           </div>
         </div>
         <div class="bank-context">
           <span class="pill is-warn">SERVIDOR: ${escapeHtml(serverName || state.selectedServer)}</span>
-          <span class="bank-context-note">Este extrato esta filtrado por servidor. Use os botoes abaixo se o mesmo jogador tambem joga em outro servidor.</span>
         </div>
         <div class="bank-server-switch">${serverSwitchHtml}</div>
         <div class="bank-toolbar">

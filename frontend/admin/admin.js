@@ -316,12 +316,10 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
         <div class="stat-card bank-card-main">
           <div class="stat-card-label">BANCO NESTE SERVIDOR</div>
           <div class="stat-card-value">${bankText}</div>
-          <div class="stat-card-foot">${summary.has_bank_activity ? 'ultimo hook de ATM/pagamento' : 'nenhuma atividade bancaria aqui'}</div>
         </div>
         <div class="stat-card">
           <div class="stat-card-label">INVENTARIO NESTE SERVIDOR</div>
           <div class="stat-card-value">${cashText}</div>
-          <div class="stat-card-foot">${summary.has_cash_activity ? 'ultimo sync/hook Bank2' : 'sem sync neste servidor'}</div>
         </div>
         <div class="stat-card">
           <div class="stat-card-label">ULTIMA ATUALIZACAO</div>

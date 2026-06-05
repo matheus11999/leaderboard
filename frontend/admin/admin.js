@@ -17,6 +17,13 @@ const state = {
   loaded: {},
   pending: 0,
   lastOkAt: null,
+  bankModal: {
+    uid: null,
+    day: '',
+    serverId: DEFAULT_SERVER_ID,
+    timer: null,
+    refreshing: false,
+  },
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
@@ -253,11 +260,16 @@ async function banPlayer(uid, ban) {
   } catch (err) { alert('Falha ban: ' + err.message); }
 }
 
-async function showBankModal(uid, day = '', serverId = state.selectedServer) {
+async function showBankModal(uid, day = '', serverId = state.selectedServer, opts = {}) {
+  const bankServerId = serverId || state.selectedServer;
+  state.bankModal.uid = uid;
+  state.bankModal.day = day || '';
+  state.bankModal.serverId = bankServerId;
+
   try {
     const q = new URLSearchParams({ limit: '100' });
     if (day) q.set('day', day);
-    q.set('server_id', serverId || state.selectedServer);
+    q.set('server_id', bankServerId);
     const d = await api('GET', '/players/' + encodeURIComponent(uid) + '/bank?' + q);
     const p = d.player || {};
     const rows = d.transactions || [];
@@ -354,8 +366,40 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
     for (const btn of document.querySelectorAll('[data-bank-server]')) {
       btn.addEventListener('click', () => showBankModal(uid, day, btn.dataset.bankServer || selectedBankServer));
     }
+    startBankModalRefresh();
   } catch (err) {
-    alert('Erro banco: ' + err.message);
+    if (opts.silent) console.warn('Erro ao atualizar banco:', err.message);
+    else alert('Erro banco: ' + err.message);
+  }
+}
+
+function startBankModalRefresh() {
+  stopBankModalRefresh();
+  state.bankModal.timer = setInterval(async () => {
+    const modal = document.getElementById('modal');
+    if (!modal || modal.classList.contains('hidden') || !state.bankModal.uid) {
+      stopBankModalRefresh();
+      return;
+    }
+    if (state.bankModal.refreshing) return;
+    state.bankModal.refreshing = true;
+    try {
+      await showBankModal(
+        state.bankModal.uid,
+        state.bankModal.day,
+        state.bankModal.serverId,
+        { silent: true }
+      );
+    } finally {
+      state.bankModal.refreshing = false;
+    }
+  }, 30000);
+}
+
+function stopBankModalRefresh() {
+  if (state.bankModal.timer) {
+    clearInterval(state.bankModal.timer);
+    state.bankModal.timer = null;
   }
 }
 
@@ -909,6 +953,7 @@ function showJson(title, data) {
   ]);
 }
 function showModal(title, body, buttons) {
+  stopBankModalRefresh();
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').textContent = body;
   renderModalButtons(buttons);
@@ -933,7 +978,11 @@ function renderModalButtons(buttons) {
     foot.appendChild(btn);
   }
 }
-function hideModal() { document.getElementById('modal').classList.add('hidden'); }
+function hideModal() {
+  stopBankModalRefresh();
+  state.bankModal.uid = null;
+  document.getElementById('modal').classList.add('hidden');
+}
 
 // ---------- format helpers ----------
 function fmtDate(s) {

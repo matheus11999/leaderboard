@@ -120,6 +120,36 @@ Expected:
 - Admin JS: `200`
 - Pending rewards by IP: `200`
 
+## Database backup
+
+The stack has a `brasilz-db-backup` container. It runs once per day at
+`08:00 UTC` (`04:00 America/Manaus`) and writes dumps to:
+
+```text
+/data/compose/4/backups/postgres
+```
+
+Files are named like:
+
+```text
+brasilz_portal_20260605T080000Z.dump
+```
+
+To force a manual backup from Portainer/host:
+
+```sh
+docker exec brasilz-db-backup sh /usr/local/bin/backup-postgres.sh
+```
+
+To list backups:
+
+```sh
+docker exec brasilz-db-backup ls -lh /backups
+```
+
+Default retention is 14 days. Override with `BACKUP_RETENTION_DAYS` in the stack
+environment if needed.
+
 ## Caddy/proxy note
 
 Host ports `80/443` are owned by container `/turbozap_caddy`.

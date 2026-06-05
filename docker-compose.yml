@@ -39,6 +39,31 @@ services:
     networks:
       - brasilz
 
+  db-backup:
+    image: postgres:16-alpine
+    container_name: brasilz-db-backup
+    restart: always
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: brasilz
+      POSTGRES_DB: brasilz_portal
+      PGPASSWORD: ${DB_PASSWORD}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./backups/postgres:/backups
+      - ./db/backup-postgres.sh:/usr/local/bin/backup-postgres.sh:ro
+    command: >
+      sh -c "echo '0 8 * * * sh /usr/local/bin/backup-postgres.sh >> /backups/backup.log 2>&1' > /tmp/cron &&
+             crontab /tmp/cron &&
+             crond -f -l 8"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - brasilz
+
   nginx:
     image: nginx:alpine
     container_name: brasilz-nginx

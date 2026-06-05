@@ -11,6 +11,22 @@ Receives webhook events from the BrasilZ mod (`POST /v1/arma/events`), stores th
 - **Nginx** (reverse proxy, optional TLS)
 - **Docker Compose**
 
+## Database backups
+
+The production stack includes a `db-backup` container. It runs `pg_dump` once per
+day at `08:00 UTC` (`04:00 America/Manaus`) and saves custom-format dumps in:
+
+```text
+/data/compose/4/backups/postgres
+```
+
+Backups are named `brasilz_portal_YYYYMMDDTHHMMSSZ.dump` and are retained for
+14 days by default. To restore one:
+
+```bash
+docker exec -i brasilz-db pg_restore -U brasilz -d brasilz_portal --clean --if-exists < /path/to/backup.dump
+```
+
 ## Quick Start (local dev)
 
 ```bash

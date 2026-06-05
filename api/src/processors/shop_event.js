@@ -56,18 +56,10 @@ module.exports = async function (data, envelope = {}) {
       );
     }
 
-    // Keep balance snapshot fresh on success.
-    if (data.success && Number.isFinite(balance.total)) {
-      await c.query(
-        `UPDATE players SET current_balance = $1, last_seen = NOW() WHERE uid = $2`,
-        [balance.total, player.uid]
-      );
-    }
-
     await touchOpenSession(c, {
       serverId,
       playerUid: player.uid,
-      balance: Number.isFinite(balance.total) ? balance.total : null,
+      balance: null,
     });
   });
 };

@@ -676,6 +676,51 @@ router.get('/players/:uid/bank', async (req, res) => {
       txParams
     );
 
+    let serverSummary = null;
+    if (selectedServer) {
+      const latestTxR = await db.query(
+        `SELECT occurred_at, bank_after, cash_balance, total_balance, source
+           FROM bank_transactions
+          WHERE player_uid = $1
+            AND server_id = $2
+            AND source <> 'sync_delta'
+          ORDER BY occurred_at DESC
+          LIMIT 1`,
+        [req.params.uid, selectedServer]
+      );
+      const latestSyncR = await db.query(
+        `SELECT received_at,
+                NULLIF(payload->>'cash_balance', '')::INT AS cash_balance
+           FROM events_raw
+          WHERE server_id = $1
+            AND event_type = 'player_bank_sync'
+            AND payload->'player'->>'uid' = $2
+            AND payload ? 'cash_balance'
+          ORDER BY received_at DESC
+          LIMIT 1`,
+        [selectedServer, req.params.uid]
+      );
+      const latestTx = latestTxR.rows[0] || null;
+      const latestSync = latestSyncR.rows[0] || null;
+      const txTime = latestTx?.occurred_at ? new Date(latestTx.occurred_at).getTime() : 0;
+      const syncTime = latestSync?.received_at ? new Date(latestSync.received_at).getTime() : 0;
+      const cashFromSync = latestSync?.cash_balance != null && syncTime >= txTime;
+
+      serverSummary = {
+        server_id: selectedServer,
+        bank_balance: latestTx?.bank_after ?? null,
+        cash_balance: cashFromSync ? latestSync.cash_balance : (latestTx?.cash_balance ?? latestSync?.cash_balance ?? null),
+        total_balance: null,
+        last_bank_seen: latestTx?.occurred_at || null,
+        last_cash_seen: cashFromSync ? latestSync.received_at : (latestTx?.occurred_at || latestSync?.received_at || null),
+        has_bank_activity: !!latestTx,
+        has_cash_activity: !!(latestTx || latestSync),
+      };
+      if (serverSummary.bank_balance != null && serverSummary.cash_balance != null) {
+        serverSummary.total_balance = Number(serverSummary.bank_balance) + Number(serverSummary.cash_balance);
+      }
+    }
+
     const serverR = selectedServer
       ? await db.query(`SELECT id, name FROM servers WHERE id = $1`, [selectedServer])
       : { rows: [] };
@@ -684,6 +729,7 @@ router.get('/players/:uid/bank', async (req, res) => {
       selected_server: selectedServer,
       selected_server_name: serverR.rows[0]?.name || selectedServer || null,
       player,
+      server_summary: serverSummary,
       transactions: txR.rows,
     });
   } catch (err) {

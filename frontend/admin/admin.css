@@ -501,6 +501,34 @@ body {
   gap: 14px;
   margin-bottom: 14px;
 }
+.bank-hero {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background:
+    linear-gradient(90deg, rgba(74,222,128,0.08), rgba(214,38,45,0.06)),
+    var(--bg-2);
+  border: 1px solid var(--border);
+}
+.bank-hero-art {
+  width: 92px;
+  height: 58px;
+  object-fit: contain;
+}
+.bank-hero-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text);
+  line-height: 1;
+}
+.bank-hero-sub {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
 .bank-context {
   display: flex;
   flex-wrap: wrap;

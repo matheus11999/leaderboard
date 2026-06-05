@@ -263,6 +263,10 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
     const rows = d.transactions || [];
     const selectedBankServer = d.selected_server || serverId || state.selectedServer;
     const serverName = d.selected_server_name || getServerName(selectedBankServer);
+    const summary = d.server_summary || {};
+    const bankText = summary.has_bank_activity ? formatBRL(summary.bank_balance || 0) : 'Sem dados';
+    const cashText = summary.has_cash_activity ? formatBRL(summary.cash_balance || 0) : 'Sem dados';
+    const lastSeen = summary.last_cash_seen || summary.last_bank_seen || null;
     const serverSwitchHtml = state.servers.map((s) => {
       const active = s.id === selectedBankServer;
       return `<button type="button" class="bank-server-btn ${active ? 'is-active' : ''}" data-bank-server="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</button>`;
@@ -290,6 +294,13 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
 
     showHtmlModal('Banco - ' + (p.name || uid), `
       <div class="bank-modal">
+        <div class="bank-hero">
+          <img src="/admin/assets/money-ledger.svg" alt="" class="bank-hero-art">
+          <div>
+            <div class="bank-hero-title">Extrato Bank2</div>
+            <div class="bank-hero-sub">Dados separados por servidor para evitar misturar saldos do mesmo jogador.</div>
+          </div>
+        </div>
         <div class="bank-context">
           <span class="pill is-warn">SERVIDOR: ${escapeHtml(serverName || state.selectedServer)}</span>
           <span class="bank-context-note">Este extrato esta filtrado por servidor. Use os botoes abaixo se o mesmo jogador tambem joga em outro servidor.</span>
@@ -305,19 +316,19 @@ async function showBankModal(uid, day = '', serverId = state.selectedServer) {
       </div>
       <div class="stats-grid bank-stats">
         <div class="stat-card bank-card-main">
-          <div class="stat-card-label">BANCO ATUAL</div>
-          <div class="stat-card-value">${formatBRL(p.bank_balance || 0)}</div>
-          <div class="stat-card-foot">ultimo dado recebido do jogo</div>
+          <div class="stat-card-label">BANCO NESTE SERVIDOR</div>
+          <div class="stat-card-value">${bankText}</div>
+          <div class="stat-card-foot">${summary.has_bank_activity ? 'ultimo hook de ATM/pagamento' : 'nenhuma atividade bancaria aqui'}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">INVENTARIO ATUAL</div>
-          <div class="stat-card-value">${formatBRL(p.current_balance || 0)}</div>
-          <div class="stat-card-foot">ultimo valor Bank2 recebido do jogo</div>
+          <div class="stat-card-label">INVENTARIO NESTE SERVIDOR</div>
+          <div class="stat-card-value">${cashText}</div>
+          <div class="stat-card-foot">${summary.has_cash_activity ? 'ultimo sync/hook Bank2' : 'sem sync neste servidor'}</div>
         </div>
         <div class="stat-card">
           <div class="stat-card-label">ULTIMA ATUALIZACAO</div>
-          <div class="stat-card-value">${p.bank_last_seen ? fmtDate(p.bank_last_seen) : 'Sem sync'}</div>
-          <div class="stat-card-foot">${p.bank_last_seen ? fmtRelative(p.bank_last_seen) : ''}</div>
+          <div class="stat-card-value">${lastSeen ? fmtDate(lastSeen) : 'Sem dados'}</div>
+          <div class="stat-card-foot">${lastSeen ? fmtRelative(lastSeen) : 'nada recebido deste servidor'}</div>
         </div>
       </div>
       <div class="table-wrap">

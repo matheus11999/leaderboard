@@ -17,15 +17,6 @@ module.exports = async function (data, envelope = {}) {
   const nextTotalBalance = Number.isFinite(totalBalance) ? Math.max(0, Math.round(totalBalance)) : null;
 
   await db.tx(async (c) => {
-    const beforeR = await c.query(
-      `SELECT bank_balance, bank_last_seen
-         FROM players
-        WHERE uid = $1
-        FOR UPDATE`,
-      [player.uid]
-    );
-    const before = beforeR.rows[0] || null;
-
     await c.query(
       `INSERT INTO players (uid, name, bank_balance, bank_last_seen, current_balance)
        VALUES ($1, $2, COALESCE($3, 0), NOW(), COALESCE($4, 0))
@@ -42,28 +33,6 @@ module.exports = async function (data, envelope = {}) {
         nextCashBalance,
       ]
     );
-
-    if (before?.bank_last_seen && nextBankBalance != null && Number(before.bank_balance) !== nextBankBalance) {
-      const bankBefore = Math.max(0, Math.round(Number(before.bank_balance) || 0));
-      const delta = nextBankBalance - bankBefore;
-      await c.query(
-        `INSERT INTO bank_transactions (
-           server_id, player_uid, player_name, transaction_type, amount,
-           bank_before, bank_after, cash_balance, total_balance, source
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'sync_delta')`,
-        [
-          serverId,
-          player.uid,
-          player.name || 'Unknown',
-          delta > 0 ? 'deposit' : 'withdraw',
-          Math.abs(delta),
-          bankBefore,
-          nextBankBalance,
-          nextCashBalance,
-          nextTotalBalance,
-        ]
-      );
-    }
 
     await touchOpenSession(c, {
       serverId,

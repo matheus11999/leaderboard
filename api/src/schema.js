@@ -32,6 +32,17 @@ async function ensureSchema() {
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bounty_server_id TEXT`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bank_balance INT NOT NULL DEFAULT 0`,
     `ALTER TABLE players ADD COLUMN IF NOT EXISTS bank_last_seen TIMESTAMPTZ`,
+    `CREATE TABLE IF NOT EXISTS server_status (
+       server_id TEXT PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
+       restart_at_unix BIGINT,
+       seconds_until_restart INT,
+       startup_unix BIGINT,
+       shutdown_in_progress BOOL NOT NULL DEFAULT false,
+       restart_triggered BOOL NOT NULL DEFAULT false,
+       manual_restart BOOL NOT NULL DEFAULT false,
+       reason TEXT,
+       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+     )`,
     `CREATE TABLE IF NOT EXISTS bank_transactions (
        id BIGSERIAL PRIMARY KEY,
        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -142,6 +153,7 @@ async function ensureSchema() {
     `CREATE INDEX IF NOT EXISTS idx_manual_payments_pending ON manual_payments (server_id, created_at) WHERE claimed = false`,
     `CREATE INDEX IF NOT EXISTS idx_manual_payments_player_uid ON manual_payments (player_uid, created_at DESC) WHERE player_uid IS NOT NULL`,
     `CREATE INDEX IF NOT EXISTS idx_servers_public ON servers (public_enabled, is_default DESC, name ASC)`,
+    `CREATE INDEX IF NOT EXISTS idx_server_status_updated_at ON server_status (updated_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_server_open ON sessions (server_id, connected_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_server_open_now ON sessions (server_id) WHERE disconnected_at IS NULL`,
     `CREATE INDEX IF NOT EXISTS idx_sessions_server_last_seen ON sessions (server_id, last_seen DESC)`,

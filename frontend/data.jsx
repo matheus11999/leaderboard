@@ -74,6 +74,7 @@ const SERVER_STATS = {
   activeMissions: 0,
   killsLast24h: 0,
   activeBounties: 0,
+  restart: null,
 };
 for (const p of DATA_PERIOD_IDS) {
   RANKINGS[p] = { pvp: [], pve: [], hunters: [] };
@@ -96,6 +97,7 @@ function resetLiveData() {
   SERVER_STATS.activeMissions = 0;
   SERVER_STATS.killsLast24h = 0;
   SERVER_STATS.activeBounties = 0;
+  SERVER_STATS.restart = null;
 
   for (const p of DATA_PERIOD_IDS) {
     RANKINGS[p] = { pvp: [], pve: [], hunters: [] };
@@ -417,6 +419,7 @@ async function fetchServerStats(serverId = SELECTED_SERVER) {
   SERVER_STATS.activeMissions = Number(data.active_missions) || 0;
   SERVER_STATS.killsLast24h = Number(data.kills_last_24h) || 0;
   SERVER_STATS.activeBounties = Number(data.active_bounties) || 0;
+  SERVER_STATS.restart = data.restart || null;
 }
 
 async function refreshAll(serverId = SELECTED_SERVER) {

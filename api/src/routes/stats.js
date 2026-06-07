@@ -46,6 +46,25 @@ router.get('/server', async (req, res) => {
         : `SELECT COUNT(*)::INT AS n FROM players WHERE bounty_active = true`,
       params
     );
+    const restartStatus = selectedServer
+      ? await db.query(
+          `SELECT
+             restart_at_unix,
+             CASE
+               WHEN restart_at_unix IS NULL THEN seconds_until_restart
+               ELSE GREATEST(0, restart_at_unix - EXTRACT(EPOCH FROM NOW())::BIGINT)::INT
+             END AS seconds_until_restart,
+             startup_unix,
+             shutdown_in_progress,
+             restart_triggered,
+             manual_restart,
+             reason,
+             updated_at
+           FROM server_status
+           WHERE server_id = $1`,
+          params
+        )
+      : { rows: [] };
 
     res.json({
       online_now: online.rows[0].n,
@@ -56,6 +75,7 @@ router.get('/server', async (req, res) => {
       kills_last_24h: last24h.rows[0].n,
       active_bounties: activeBounties.rows[0].n,
       online_grace_seconds: onlineSeconds,
+      restart: restartStatus.rows[0] || null,
     });
   } catch (err) {
     res.status(500).json({ error: 'query failed', message: err.message });

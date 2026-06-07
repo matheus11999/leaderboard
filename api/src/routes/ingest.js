@@ -16,6 +16,7 @@ const playerBankSync     = require('../processors/player_bank_sync');
 const bankTransaction    = require('../processors/bank_transaction');
 const shopEvent          = require('../processors/shop_event');
 const missionEvent       = require('../processors/mission_event');
+const serverRestartStatus = require('../processors/server_restart_status');
 
 const PROCESSORS = {
   player_connected:    playerConnected,
@@ -32,6 +33,7 @@ const PROCESSORS = {
   shop_sale:            shopEvent,
   mission_started:     missionEvent.handleStarted,
   mission_ended:       missionEvent.handleEnded,
+  server_restart_status: serverRestartStatus,
 };
 
 const router = express.Router();

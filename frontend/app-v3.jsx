@@ -42,6 +42,17 @@ function useClock() {
   return time;
 }
 
+function formatRestartCountdown(value) {
+  const total = Math.max(0, Math.floor(Number(value) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+  return `${seconds}s`;
+}
+
 function HeroUnified({ period, setPeriod, mode, setMode, players }) {
   const stats  = window.GAME_DATA.SERVER_STATS || {};
   const servers = window.GAME_DATA.SERVERS || [];
@@ -57,6 +68,11 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
   const maxPl    = Number(stats.maxPlayers)  || 80;
   const kills24h = Number(stats.killsLast24h || 0);
   const totalKills = Number(stats.totalKills || 0);
+  const restart = stats.restart || null;
+  const restartAtUnix = restart ? Number(restart.restart_at_unix) || 0 : 0;
+  const restartSeconds = restart
+    ? (restartAtUnix > 0 ? Math.max(0, restartAtUnix - Math.floor(clock.getTime() / 1000)) : Number(restart.seconds_until_restart) || 0)
+    : null;
 
   const periodLabel = (UI_PERIODS.find(p => p.id === period) || UI_PERIODS[0]).label;
 
@@ -121,6 +137,18 @@ function HeroUnified({ period, setPeriod, mode, setMode, players }) {
               <span className="hu2-stat-lbl">{totalKills > 0 ? "KILLS TOTAIS" : "KILLS 24H"}</span>
             </div>
           </div>
+
+          {restart && (
+            <React.Fragment>
+              <div className="hu2-stat-sep" aria-hidden="true" />
+              <div className={`hu2-stat hu2-stat-restart ${restart.shutdown_in_progress ? "is-hot" : ""}`}>
+                <div className="hu2-stat-body">
+                  <span className="hu2-stat-val">{formatRestartCountdown(restartSeconds)}</span>
+                  <span className="hu2-stat-lbl">{restart.shutdown_in_progress ? "REINICIANDO" : "RESTART"}</span>
+                </div>
+              </div>
+            </React.Fragment>
+          )}
         </div>
       </div>
 

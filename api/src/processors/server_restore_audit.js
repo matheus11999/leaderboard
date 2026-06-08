@@ -77,7 +77,7 @@ async function refreshCounters(c, restartId) {
      FROM (
        SELECT
          COUNT(*) FILTER (WHERE (details->>'snapshot_saved')::BOOL IS TRUE)::INT AS snapshot_count,
-         COUNT(*) FILTER (WHERE phase = 'snapshot_restored')::INT AS snapshot_restore_count,
+         COUNT(*) FILTER (WHERE phase IN ('snapshot_restored', 'snapshot_login_applied'))::INT AS snapshot_restore_count,
          COUNT(*) FILTER (WHERE phase IN ('queue_rejected', 'restore_kicked'))::INT AS queue_reject_count,
          COUNT(*) FILTER (WHERE severity IN ('error', 'warning'))::INT AS error_count
        FROM server_restart_events

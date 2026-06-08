@@ -366,7 +366,7 @@ router.get('/restarts/:id', async (req, res) => {
          MAX(player_id) AS player_id,
          COUNT(*)::INT AS event_count,
          BOOL_OR(phase = 'snapshot_saved' OR (details->>'snapshot_saved')::BOOL IS TRUE) AS snapshot_saved,
-         BOOL_OR(phase = 'snapshot_restored') AS snapshot_restored,
+         BOOL_OR(phase IN ('snapshot_restored', 'snapshot_login_applied')) AS snapshot_restored,
          BOOL_OR(phase IN ('queue_rejected', 'restore_kicked')) AS queue_issue,
          BOOL_OR(phase = 'vanilla_restored' OR phase = 'vanilla_character_loaded_ok') AS vanilla_restored,
          BOOL_OR(severity IN ('error', 'warning')) AS has_warning,

@@ -79,7 +79,7 @@ async function refreshCounters(c, restartId) {
          COUNT(*) FILTER (WHERE (details->>'snapshot_saved')::BOOL IS TRUE)::INT AS snapshot_count,
          COUNT(*) FILTER (WHERE phase IN ('snapshot_restored', 'snapshot_login_applied'))::INT AS snapshot_restore_count,
          COUNT(*) FILTER (WHERE phase IN ('queue_rejected', 'restore_kicked'))::INT AS queue_reject_count,
-         COUNT(*) FILTER (WHERE severity IN ('error', 'warning'))::INT AS error_count
+         COUNT(*) FILTER (WHERE severity IN ('error', 'warning') AND phase <> 'snapshot_login_applied')::INT AS error_count
        FROM server_restart_events
        WHERE restart_id = $1
      ) x
@@ -93,7 +93,9 @@ module.exports = async function serverRestoreAudit(data, envelope) {
     const restartId = await findOrCreateRestoreSession(c, data, envelope);
     const player = data.player || {};
     const phase = str(data.phase || 'restore_event', 80);
-    const severity = str(data.severity || (phase.includes('failed') || phase.includes('unsafe') || phase.includes('kick') ? 'warning' : 'info'), 24) || 'info';
+    const severity = phase === 'snapshot_login_applied'
+      ? 'info'
+      : (str(data.severity || (phase.includes('failed') || phase.includes('unsafe') || phase.includes('kick') ? 'warning' : 'info'), 24) || 'info');
 
     await c.query(
       `INSERT INTO server_restart_events (

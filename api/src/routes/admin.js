@@ -360,16 +360,18 @@ router.get('/restarts/:id', async (req, res) => {
 
     const playersR = await db.query(
       `SELECT
-         COALESCE(player_uid, 'player_id:' || COALESCE(player_id::TEXT, 'unknown')) AS key,
+         COALESCE('player_id:' || player_id::TEXT, player_uid, player_name, 'unknown') AS key,
          MAX(player_uid) AS player_uid,
          MAX(player_name) AS player_name,
          MAX(player_id) AS player_id,
          COUNT(*)::INT AS event_count,
          BOOL_OR(phase = 'snapshot_saved' OR (details->>'snapshot_saved')::BOOL IS TRUE) AS snapshot_saved,
+         BOOL_OR(phase = 'snapshot_loaded') AS snapshot_loaded,
          BOOL_OR(phase IN ('snapshot_restored', 'snapshot_login_applied')) AS snapshot_restored,
+         BOOL_OR(phase = 'snapshot_login_applied') AS snapshot_login_applied,
          BOOL_OR(phase IN ('queue_rejected', 'restore_kicked')) AS queue_issue,
          BOOL_OR(phase = 'vanilla_restored' OR phase = 'vanilla_character_loaded_ok') AS vanilla_restored,
-         BOOL_OR(severity IN ('error', 'warning')) AS has_warning,
+         BOOL_OR(severity IN ('error', 'warning') AND phase <> 'snapshot_login_applied') AS has_warning,
          MIN(occurred_at) AS first_event_at,
          MAX(occurred_at) AS last_event_at
        FROM server_restart_events

@@ -666,6 +666,9 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.restart-detail .pill + .pill {
+  margin-left: 5px;
+}
 
 @media (max-width: 720px) {
   .topbar {

@@ -602,6 +602,28 @@ function restartStatusPill(status) {
   return `<span class="pill">${escapeHtml(status || 'ativo')}</span>`;
 }
 
+function restartRestorePill(p) {
+  if (p.snapshot_login_applied && p.vanilla_restored) return '<span class="pill is-warn">SNAPSHOT TESTE</span><span class="pill is-ok">VANILLA</span>';
+  if (p.snapshot_restored) return '<span class="pill is-warn">SNAPSHOT</span>';
+  if (p.vanilla_restored) return '<span class="pill is-ok">VANILLA</span>';
+  return '<span class="pill">-</span>';
+}
+
+function restartPhaseLabel(phase) {
+  const labels = {
+    boot_cleanup_finished: 'Boot liberado',
+    queue_accepted: 'Entrou na fila',
+    queue_released: 'Saiu da fila',
+    vanilla_restored: 'Restore vanilla',
+    snapshot_loaded: 'Snapshot carregado',
+    snapshot_loadout_applied: 'Loadout do snapshot',
+    snapshot_login_applied: 'Snapshot aplicado',
+    snapshot_saved: 'Snapshot salvo',
+    snapshot_restored: 'Snapshot emergencia',
+  };
+  return labels[phase] || phase || '-';
+}
+
 async function showRestartDetail(id) {
   try {
     const d = await api('GET', '/restarts/' + encodeURIComponent(id));
@@ -611,10 +633,10 @@ async function showRestartDetail(id) {
     const raw = d.raw_events || [];
 
     const cards = [
-      { label: 'Jogadores no restart', value: r.player_count || players.length || 0 },
+      { label: 'Jogadores monitorados', value: players.length || r.player_count || 0 },
       { label: 'Salvos', value: r.saved_count || 0 },
       { label: 'Snapshots salvos', value: r.snapshot_count || 0 },
-      { label: 'Restaurados por snapshot', value: r.snapshot_restore_count || 0 },
+      { label: 'Snapshot aplicado', value: r.snapshot_restore_count || 0 },
       { label: 'Problemas de fila', value: r.queue_reject_count || 0 },
       { label: 'Alertas', value: r.error_count || 0 },
     ].map(c => `
@@ -629,7 +651,7 @@ async function showRestartDetail(id) {
         <td>${escapeHtml(p.player_name || p.player_uid || p.key || '-')}</td>
         <td>${escapeHtml(p.player_uid || '-')}</td>
         <td>${p.snapshot_saved ? '<span class="pill is-ok">SIM</span>' : '<span class="pill">NAO</span>'}</td>
-        <td>${p.vanilla_restored ? '<span class="pill is-ok">VANILLA</span>' : (p.snapshot_restored ? '<span class="pill is-warn">SNAPSHOT</span>' : '<span class="pill">-</span>')}</td>
+        <td>${restartRestorePill(p)}</td>
         <td>${p.queue_issue ? '<span class="pill is-warn">SIM</span>' : '<span class="pill is-ok">NAO</span>'}</td>
         <td>${p.has_warning ? '<span class="pill is-err">ALERTA</span>' : '<span class="pill is-ok">OK</span>'}</td>
         <td>${escapeHtml(p.event_count || 0)}</td>
@@ -640,7 +662,7 @@ async function showRestartDetail(id) {
       <tr>
         <td><div>${fmtDate(ev.occurred_at)}</div><div class="muted">${fmtRelative(ev.occurred_at)}</div></td>
         <td>${severityPill(ev.severity)}</td>
-        <td>${escapeHtml(ev.phase || ev.event_type)}</td>
+        <td><div>${escapeHtml(restartPhaseLabel(ev.phase || ev.event_type))}</div><div class="muted">${escapeHtml(ev.phase || ev.event_type)}</div></td>
         <td>${escapeHtml(ev.player_name || ev.player_uid || '-')}</td>
         <td>${escapeHtml(ev.reason || '-')}</td>
         <td><button class="row-btn" data-restart-event-json="${escapeHtml(String(ev.id))}">JSON</button></td>
@@ -667,7 +689,7 @@ async function showRestartDetail(id) {
         <div class="restart-grid">${cards}</div>
         <h3>Jogadores</h3>
         <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>JOGADOR</th><th>UID</th><th>SNAP SALVO</th><th>RESTORE</th><th>FILA</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
+          <thead><tr><th>JOGADOR</th><th>UID</th><th>SNAPSHOT SALVO</th><th>COMO ENTROU</th><th>FILA</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
           <tbody>${playerRows}</tbody>
         </table></div>
         <h3>Timeline</h3>

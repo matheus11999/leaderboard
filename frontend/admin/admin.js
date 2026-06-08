@@ -28,6 +28,7 @@ const state = {
   paymentsRefreshing: false,
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
+    restarts: { offset: 0, limit: 50, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
     kills:    { offset: 0, limit: 50, total: 0 },
     sessions: { offset: 0, limit: 50, total: 0 },
@@ -161,6 +162,7 @@ async function refreshTab(name) {
     switch (name) {
       case 'overview': await loadOverview(); break;
       case 'servers':  await loadServers(); break;
+      case 'restarts': await loadRestarts(); break;
       case 'players':  await loadPlayers(); break;
       case 'kills':    await loadKills(); break;
       case 'sessions': await loadSessions(); break;
@@ -554,8 +556,149 @@ async function loadServers() {
     { key: 'updated_at', label: 'ATUALIZADO', render: v => fmtDate(v) },
   ], state.servers, [
     { label: 'EDIT', onClick: fillServerForm },
+    { label: 'RESTARTS', kind: 'warn', onClick: r => {
+      state.selectedServer = r.id;
+      for (const pager of Object.values(state.pagers)) pager.offset = 0;
+      invalidateDataTabs();
+      renderServerSelects();
+      switchTab('restarts', { force: true });
+    } },
     { label: 'DEL', kind: 'danger', onClick: r => confirmDelete('servidor ' + r.id, () => apiDelete('/servers/' + encodeURIComponent(r.id), 'servers')) },
   ]);
+}
+
+// ---------- restarts ----------
+async function loadRestarts() {
+  const pager = state.pagers.restarts;
+  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+  try {
+    const d = await api('GET', withServer('/restarts?' + q));
+    pager.total = d.total;
+    renderTable('restarts-table', [
+      { key: 'started_at', label: 'INICIO', render: v => fmtDate(v) },
+      { key: 'server_name', label: 'SERVIDOR', render: (_v, r) => escapeHtml(r.server_name || r.server_id) },
+      { key: 'status', label: 'STATUS', render: v => restartStatusPill(v) },
+      { key: 'reason', label: 'MOTIVO', render: v => escapeHtml(v || '-') },
+      { key: 'player_count', label: 'PLAYERS' },
+      { key: 'saved_count', label: 'SALVOS' },
+      { key: 'snapshot_count', label: 'SNAPS' },
+      { key: 'snapshot_restore_count', label: 'REST. SNAP' },
+      { key: 'queue_reject_count', label: 'FILA' },
+      { key: 'error_count', label: 'ALERTAS', render: v => Number(v) > 0 ? `<span class="pill is-err">${v}</span>` : '<span class="pill is-ok">0</span>' },
+      { key: 'updated_at', label: 'ATUALIZADO', render: v => fmtRelative(v) },
+    ], d.rows || [], [
+      { label: 'ABRIR', onClick: r => showRestartDetail(r.id) },
+    ]);
+    renderPager('restarts-pager', 'restarts');
+  } catch (err) {
+    alert('Erro restarts: ' + err.message);
+  }
+}
+
+function restartStatusPill(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'complete') return '<span class="pill is-ok">COMPLETO</span>';
+  if (s === 'shutdown') return '<span class="pill is-warn">SHUTDOWN</span>';
+  return `<span class="pill">${escapeHtml(status || 'ativo')}</span>`;
+}
+
+async function showRestartDetail(id) {
+  try {
+    const d = await api('GET', '/restarts/' + encodeURIComponent(id));
+    const r = d.restart || {};
+    const players = d.players || [];
+    const events = d.events || [];
+    const raw = d.raw_events || [];
+
+    const cards = [
+      { label: 'Jogadores no restart', value: r.player_count || players.length || 0 },
+      { label: 'Salvos', value: r.saved_count || 0 },
+      { label: 'Snapshots salvos', value: r.snapshot_count || 0 },
+      { label: 'Restaurados por snapshot', value: r.snapshot_restore_count || 0 },
+      { label: 'Problemas de fila', value: r.queue_reject_count || 0 },
+      { label: 'Alertas', value: r.error_count || 0 },
+    ].map(c => `
+      <div class="restart-card">
+        <div class="restart-card-label">${escapeHtml(c.label)}</div>
+        <div class="restart-card-value">${escapeHtml(c.value)}</div>
+      </div>
+    `).join('');
+
+    const playerRows = players.length ? players.map(p => `
+      <tr>
+        <td>${escapeHtml(p.player_name || p.player_uid || p.key || '-')}</td>
+        <td>${escapeHtml(p.player_uid || '-')}</td>
+        <td>${p.snapshot_saved ? '<span class="pill is-ok">SIM</span>' : '<span class="pill">NAO</span>'}</td>
+        <td>${p.vanilla_restored ? '<span class="pill is-ok">VANILLA</span>' : (p.snapshot_restored ? '<span class="pill is-warn">SNAPSHOT</span>' : '<span class="pill">-</span>')}</td>
+        <td>${p.queue_issue ? '<span class="pill is-warn">SIM</span>' : '<span class="pill is-ok">NAO</span>'}</td>
+        <td>${p.has_warning ? '<span class="pill is-err">ALERTA</span>' : '<span class="pill is-ok">OK</span>'}</td>
+        <td>${escapeHtml(p.event_count || 0)}</td>
+      </tr>
+    `).join('') : '<tr><td colspan="7">Nenhum jogador registrado nesse restart.</td></tr>';
+
+    const eventRows = events.length ? events.map(ev => `
+      <tr>
+        <td><div>${fmtDate(ev.occurred_at)}</div><div class="muted">${fmtRelative(ev.occurred_at)}</div></td>
+        <td>${severityPill(ev.severity)}</td>
+        <td>${escapeHtml(ev.phase || ev.event_type)}</td>
+        <td>${escapeHtml(ev.player_name || ev.player_uid || '-')}</td>
+        <td>${escapeHtml(ev.reason || '-')}</td>
+        <td><button class="row-btn" data-restart-event-json="${escapeHtml(String(ev.id))}">JSON</button></td>
+      </tr>
+    `).join('') : '<tr><td colspan="6">Sem eventos detalhados.</td></tr>';
+
+    const rawRows = raw.slice(-30).map(ev => `
+      <tr>
+        <td>${fmtDate(ev.received_at)}</td>
+        <td>${escapeHtml(ev.event_type)}</td>
+        <td>${ev.processed ? '<span class="pill is-ok">OK</span>' : '<span class="pill is-warn">NAO</span>'}</td>
+        <td>${ev.error ? `<span class="pill is-err">${escapeHtml(ev.error).slice(0, 80)}</span>` : '-'}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4">Sem raw events na janela.</td></tr>';
+
+    const html = `
+      <div class="restart-detail">
+        <div class="restart-head">
+          <div>
+            <div class="restart-title">${escapeHtml(r.server_name || r.server_id || '')}</div>
+            <div class="muted">${escapeHtml(r.restart_key || '')} | ${fmtDate(r.started_at)} | ${restartStatusPill(r.status)}</div>
+          </div>
+        </div>
+        <div class="restart-grid">${cards}</div>
+        <h3>Jogadores</h3>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>JOGADOR</th><th>UID</th><th>SNAP SALVO</th><th>RESTORE</th><th>FILA</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
+          <tbody>${playerRows}</tbody>
+        </table></div>
+        <h3>Timeline</h3>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>HORA</th><th>NIVEL</th><th>FASE</th><th>JOGADOR</th><th>MOTIVO</th><th>DETALHE</th></tr></thead>
+          <tbody>${eventRows}</tbody>
+        </table></div>
+        <h3>Raw events proximos</h3>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>HORA</th><th>TIPO</th><th>PROC</th><th>ERRO</th></tr></thead>
+          <tbody>${rawRows}</tbody>
+        </table></div>
+      </div>
+    `;
+    showHtmlModal('Restart #' + id, html);
+    for (const btn of document.querySelectorAll('[data-restart-event-json]')) {
+      btn.addEventListener('click', () => {
+        const ev = events.find(x => String(x.id) === btn.dataset.restartEventJson);
+        showJson('Restart event #' + btn.dataset.restartEventJson, ev?.details || ev || {});
+      });
+    }
+  } catch (err) {
+    alert('Erro detalhe restart: ' + err.message);
+  }
+}
+
+function severityPill(severity) {
+  const s = String(severity || 'info').toLowerCase();
+  if (s === 'error') return '<span class="pill is-err">ERRO</span>';
+  if (s === 'warning') return '<span class="pill is-warn">ALERTA</span>';
+  return '<span class="pill is-ok">INFO</span>';
 }
 
 function renderServerSelects() {

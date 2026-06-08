@@ -497,6 +497,60 @@ body {
   border-top: 1px solid var(--border);
 }
 
+.restart-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-family: var(--font-body);
+  color: var(--text-muted);
+}
+.restart-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+.restart-title {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text);
+  line-height: 1;
+}
+.restart-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 10px;
+}
+.restart-card {
+  padding: 12px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+}
+.restart-card-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+.restart-card-value {
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--text);
+  line-height: 1;
+}
+.restart-detail h3 {
+  margin: 4px 0 -8px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--text);
+}
+.muted {
+  color: var(--text-dim);
+}
+
 .bank-modal {
   display: flex;
   flex-direction: column;
@@ -677,6 +731,18 @@ body {
   .bank-stats .stat-card-value {
     font-size: 24px;
     overflow-wrap: anywhere;
+  }
+  .restart-head {
+    flex-direction: column;
+  }
+  .restart-title {
+    font-size: 22px;
+  }
+  .restart-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .restart-card-value {
+    font-size: 23px;
   }
 }
 

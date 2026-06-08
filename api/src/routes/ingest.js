@@ -17,6 +17,8 @@ const bankTransaction    = require('../processors/bank_transaction');
 const shopEvent          = require('../processors/shop_event');
 const missionEvent       = require('../processors/mission_event');
 const serverRestartStatus = require('../processors/server_restart_status');
+const serverRestartAudit = require('../processors/server_restart_audit');
+const serverRestoreAudit = require('../processors/server_restore_audit');
 
 const PROCESSORS = {
   player_connected:    playerConnected,
@@ -34,6 +36,8 @@ const PROCESSORS = {
   mission_started:     missionEvent.handleStarted,
   mission_ended:       missionEvent.handleEnded,
   server_restart_status: serverRestartStatus,
+  server_restart_audit: serverRestartAudit,
+  server_restore_audit: serverRestoreAudit,
 };
 
 const router = express.Router();

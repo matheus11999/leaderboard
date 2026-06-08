@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20260605-3">
+<link rel="stylesheet" href="admin.css?v=20260607-restarts">
 </head>
 <body>
 
@@ -58,6 +58,7 @@
   <nav class="tabs">
     <button class="tab is-active" data-tab="overview">OVERVIEW</button>
     <button class="tab" data-tab="servers">SERVIDORES</button>
+    <button class="tab" data-tab="restarts">RESTARTS</button>
     <button class="tab" data-tab="players">JOGADORES</button>
     <button class="tab" data-tab="kills">MORTES</button>
     <button class="tab" data-tab="sessions">SESSÕES</button>
@@ -111,6 +112,16 @@
         <button class="btn-ghost" data-refresh="servers">ATUALIZAR</button>
       </div>
       <div class="table-wrap"><table id="servers-table" class="data-table"></table></div>
+    </section>
+
+    <!-- RESTARTS -->
+    <section class="tab-pane" id="pane-restarts">
+      <h2 class="pane-title">RESTARTS <span class="accent">// AUDITORIA</span></h2>
+      <div class="toolbar">
+        <button class="btn-ghost" data-refresh="restarts">ATUALIZAR</button>
+      </div>
+      <div class="table-wrap"><table id="restarts-table" class="data-table"></table></div>
+      <div class="pager" id="restarts-pager"></div>
     </section>
 
     <!-- PLAYERS -->
@@ -326,6 +337,9 @@
           <option value="shop_purchase_failed">shop_purchase_failed</option>
           <option value="mission_started">mission_started</option>
           <option value="mission_ended">mission_ended</option>
+          <option value="server_restart_status">server_restart_status</option>
+          <option value="server_restart_audit">server_restart_audit</option>
+          <option value="server_restore_audit">server_restore_audit</option>
         </select>
         <select id="events-processed" class="select-input">
           <option value="">Status: todos</option>
@@ -357,6 +371,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20260605-5"></script>
+<script src="admin.js?v=20260607-restarts"></script>
 </body>
 </html>

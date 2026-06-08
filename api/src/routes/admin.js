@@ -296,6 +296,112 @@ router.delete('/servers/:id', async (req, res) => {
 // -------------------------------------------------------------------
 // Overview — private dashboard stats
 // -------------------------------------------------------------------
+// -------------------------------------------------------------------
+// Restart audit
+// -------------------------------------------------------------------
+router.get('/restarts', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 200);
+  const offset = clampOffset(req.query.offset);
+  const selectedServer = serverFilter(req);
+  const params = [limit, offset];
+  const conds = [];
+  if (selectedServer) {
+    params.push(selectedServer);
+    conds.push(`r.server_id = $${params.length}`);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const countParams = selectedServer ? [selectedServer] : [];
+  const countWhere = selectedServer ? 'WHERE server_id = $1' : '';
+
+  try {
+    const rowsR = await db.query(
+      `SELECT r.id, r.server_id, s.name AS server_name, r.restart_key,
+              r.started_at, r.ended_at, r.status, r.reason, r.manual_restart,
+              r.restart_at_unix, r.startup_unix, r.player_count,
+              r.saved_count, r.snapshot_count, r.snapshot_restore_count,
+              r.queue_reject_count, r.error_count, r.updated_at
+         FROM server_restarts r
+         LEFT JOIN servers s ON s.id = r.server_id
+         ${where}
+        ORDER BY r.started_at DESC
+        LIMIT $1 OFFSET $2`,
+      params
+    );
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM server_restarts ${countWhere}`, countParams);
+    res.json({ total: countR.rows[0].n, rows: rowsR.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.get('/restarts/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid restart id' });
+
+  try {
+    const restartR = await db.query(
+      `SELECT r.*, s.name AS server_name
+         FROM server_restarts r
+         LEFT JOIN servers s ON s.id = r.server_id
+        WHERE r.id = $1`,
+      [id]
+    );
+    const restart = restartR.rows[0];
+    if (!restart) return res.status(404).json({ error: 'not found' });
+
+    const eventsR = await db.query(
+      `SELECT id, occurred_at, event_type, phase, severity, player_id,
+              player_uid, player_name, reason, details
+         FROM server_restart_events
+        WHERE restart_id = $1
+        ORDER BY occurred_at ASC, id ASC`,
+      [id]
+    );
+
+    const playersR = await db.query(
+      `SELECT
+         COALESCE(player_uid, 'player_id:' || COALESCE(player_id::TEXT, 'unknown')) AS key,
+         MAX(player_uid) AS player_uid,
+         MAX(player_name) AS player_name,
+         MAX(player_id) AS player_id,
+         COUNT(*)::INT AS event_count,
+         BOOL_OR(phase = 'snapshot_saved' OR (details->>'snapshot_saved')::BOOL IS TRUE) AS snapshot_saved,
+         BOOL_OR(phase = 'snapshot_restored') AS snapshot_restored,
+         BOOL_OR(phase IN ('queue_rejected', 'restore_kicked')) AS queue_issue,
+         BOOL_OR(phase = 'vanilla_restored' OR phase = 'vanilla_character_loaded_ok') AS vanilla_restored,
+         BOOL_OR(severity IN ('error', 'warning')) AS has_warning,
+         MIN(occurred_at) AS first_event_at,
+         MAX(occurred_at) AS last_event_at
+       FROM server_restart_events
+       WHERE restart_id = $1
+         AND (player_uid IS NOT NULL OR player_id IS NOT NULL OR player_name IS NOT NULL)
+       GROUP BY key
+       ORDER BY has_warning DESC, snapshot_restored DESC, last_event_at DESC`,
+      [id]
+    );
+
+    const rawR = await db.query(
+      `SELECT id, received_at, event_type, processed, error, payload
+         FROM events_raw
+        WHERE server_id = $1
+          AND received_at BETWEEN $2::timestamptz - INTERVAL '10 minutes'
+                              AND COALESCE($3::timestamptz, $2::timestamptz + INTERVAL '25 minutes')
+        ORDER BY received_at ASC
+        LIMIT 300`,
+      [restart.server_id, restart.started_at, restart.ended_at]
+    );
+
+    res.json({
+      restart,
+      players: playersR.rows,
+      events: eventsR.rows,
+      raw_events: rawR.rows,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
 router.get('/overview', async (req, res) => {
   try {
     const selectedServer = serverFilter(req);

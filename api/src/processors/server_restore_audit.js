@@ -34,6 +34,37 @@ async function findRestart(c, data, envelope) {
   return recent.rows[0]?.id || null;
 }
 
+async function findOrCreateRestoreSession(c, data, envelope) {
+  const existingId = await findRestart(c, data, envelope);
+  if (existingId) return existingId;
+
+  const occurredAt = eventTime(envelope);
+  const restoreKey = str(
+    data.restart_key || `restore_${envelope.server_id}_${Math.floor(occurredAt.getTime() / 1000 / 1800)}`,
+    120
+  );
+
+  const r = await c.query(
+    `INSERT INTO server_restarts (
+       server_id, restart_key, started_at, status, reason, manual_restart,
+       restart_at_unix, startup_unix, player_count, updated_at
+     )
+     VALUES ($1, $2, $3, $4, $5, FALSE, NULL, NULL, 0, NOW())
+     ON CONFLICT (server_id, restart_key) DO UPDATE SET
+       updated_at = NOW(),
+       player_count = GREATEST(server_restarts.player_count, 1)
+     RETURNING id`,
+    [
+      envelope.server_id,
+      restoreKey,
+      occurredAt,
+      'active',
+      'restore audit',
+    ]
+  );
+  return r.rows[0].id;
+}
+
 async function refreshCounters(c, restartId) {
   if (!restartId) return;
   await c.query(
@@ -59,7 +90,7 @@ async function refreshCounters(c, restartId) {
 
 module.exports = async function serverRestoreAudit(data, envelope) {
   await db.tx(async (c) => {
-    const restartId = await findRestart(c, data, envelope);
+    const restartId = await findOrCreateRestoreSession(c, data, envelope);
     const player = data.player || {};
     const phase = str(data.phase || 'restore_event', 80);
     const severity = str(data.severity || (phase.includes('failed') || phase.includes('unsafe') || phase.includes('kick') ? 'warning' : 'info'), 24) || 'info';
@@ -88,4 +119,3 @@ module.exports = async function serverRestoreAudit(data, envelope) {
     await refreshCounters(c, restartId);
   });
 };
-

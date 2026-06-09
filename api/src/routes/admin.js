@@ -2,10 +2,12 @@
 
 const express = require('express');
 const bcrypt = require('bcrypt');
+const fs = require('fs');
 const db = require('../db');
 const { requireAdmin, login } = require('../auth');
 const { normalizeServerId, slugifyServerId, serverFilter, ensureServer } = require('../lib/servers');
 const { onlineGraceSeconds, onlineSql } = require('../lib/online');
+const serverBackups = require('../lib/serverBackups');
 
 const router = express.Router();
 
@@ -299,6 +301,131 @@ router.delete('/servers/:id', async (req, res) => {
 // -------------------------------------------------------------------
 // Restart audit
 // -------------------------------------------------------------------
+// -------------------------------------------------------------------
+// Server file backups via SFTP
+// -------------------------------------------------------------------
+router.get('/backups/configs', async (_req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT s.id AS server_id, s.name AS server_name,
+              c.host, c.port, c.username, c.password_enc, c.remote_path,
+              c.enabled, c.schedule_minutes, c.last_test_ok, c.last_test_at,
+              c.last_test_error, c.last_backup_at, c.last_backup_status,
+              c.last_backup_error, c.updated_at
+         FROM servers s
+         LEFT JOIN server_backup_configs c ON c.server_id = s.id
+        ORDER BY s.is_default DESC, s.name ASC`
+    );
+    res.json({
+      rows: r.rows.map((row) => ({
+        ...serverBackups.publicConfig(row.server_id ? row : null),
+        server_id: row.server_id,
+        server_name: row.server_name,
+        configured: !!row.host,
+        host: row.host || '',
+        port: row.port || 22,
+        username: row.username || '',
+        remote_path: row.remote_path || '/home/container/profile/profile',
+        enabled: !!row.enabled,
+        schedule_minutes: row.schedule_minutes || 60,
+        has_password: !!row.password_enc,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.get('/backups', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 200);
+  const offset = clampOffset(req.query.offset);
+  const selectedServer = serverFilter(req);
+  const params = [limit, offset];
+  const conds = [];
+  if (selectedServer) {
+    params.push(selectedServer);
+    conds.push(`b.server_id = $${params.length}`);
+  }
+  const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
+  const countParams = selectedServer ? [selectedServer] : [];
+  const countWhere = selectedServer ? 'WHERE server_id = $1' : '';
+  try {
+    const rowsR = await db.query(
+      `SELECT b.id, b.server_id, s.name AS server_name, b.status, b.source_host,
+              b.remote_path, b.filename, b.file_size, b.started_at, b.finished_at,
+              b.duration_ms, b.error, b.created_by, b.notes
+         FROM server_backups b
+         LEFT JOIN servers s ON s.id = b.server_id
+         ${where}
+        ORDER BY b.started_at DESC
+        LIMIT $1 OFFSET $2`,
+      params
+    );
+    const countR = await db.query(`SELECT COUNT(*)::INT AS n FROM server_backups ${countWhere}`, countParams);
+    res.json({ total: countR.rows[0].n, rows: rowsR.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.get('/backups/:serverId/config', async (req, res) => {
+  const serverId = normalizeServerId(req.params.serverId);
+  try {
+    await ensureServer(serverId);
+    const row = await serverBackups.getConfig(serverId);
+    res.json({ config: serverBackups.publicConfig(row) || { server_id: serverId, port: 22, remote_path: '/home/container/profile/profile', enabled: false, schedule_minutes: 60, has_password: false } });
+  } catch (err) {
+    res.status(500).json({ error: 'query failed', message: err.message });
+  }
+});
+
+router.put('/backups/:serverId/config', express.json(), async (req, res) => {
+  const serverId = normalizeServerId(req.params.serverId);
+  try {
+    await ensureServer(serverId);
+    const config = await serverBackups.upsertConfig(serverId, req.body || {});
+    res.json({ config });
+  } catch (err) {
+    res.status(400).json({ error: 'save failed', message: err.message });
+  }
+});
+
+router.post('/backups/:serverId/test', async (req, res) => {
+  const serverId = normalizeServerId(req.params.serverId);
+  try {
+    const result = await serverBackups.testConnection(serverId);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ ok: false, error: 'connection failed', message: err.message });
+  }
+});
+
+router.post('/backups/:serverId/run', async (req, res) => {
+  const serverId = normalizeServerId(req.params.serverId);
+  try {
+    const row = await serverBackups.runBackup(serverId, req.admin?.username || 'admin');
+    res.status(201).json({ backup: row });
+  } catch (err) {
+    res.status(400).json({ error: 'backup failed', message: err.message });
+  }
+});
+
+router.get('/backups/:id/download', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'invalid backup id' });
+  try {
+    const r = await db.query(`SELECT id, status, filename, file_path FROM server_backups WHERE id = $1`, [id]);
+    const row = r.rows[0];
+    if (!row) return res.status(404).json({ error: 'not found' });
+    if (row.status !== 'success' || !row.file_path || !fs.existsSync(row.file_path)) {
+      return res.status(404).json({ error: 'backup file not available' });
+    }
+    res.download(row.file_path, row.filename || `backup-${id}.zip`);
+  } catch (err) {
+    res.status(500).json({ error: 'download failed', message: err.message });
+  }
+});
+
 router.get('/restarts', async (req, res) => {
   const limit = clampLimit(req.query.limit, 50, 200);
   const offset = clampOffset(req.query.offset);
@@ -367,13 +494,19 @@ router.get('/restarts/:id', async (req, res) => {
          COUNT(*)::INT AS event_count,
          BOOL_OR(phase = 'snapshot_saved' OR (details->>'snapshot_saved')::BOOL IS TRUE) AS snapshot_saved,
          BOOL_OR(phase = 'snapshot_loaded') AS snapshot_loaded,
-         BOOL_OR(phase IN ('snapshot_restored', 'snapshot_login_applied')) AS snapshot_restored,
+         BOOL_OR(phase = 'snapshot_loadout_applied') AS snapshot_loadout_applied,
+         BOOL_OR(phase IN ('snapshot_restored', 'snapshot_login_applied', 'snapshot_loadout_applied')) AS snapshot_restored,
          BOOL_OR(phase = 'snapshot_login_applied') AS snapshot_login_applied,
          BOOL_OR(phase IN ('queue_rejected', 'restore_kicked')) AS queue_issue,
+         BOOL_OR(phase IN ('queue_rejected', 'restore_kicked')) AS restore_blocked,
+         BOOL_OR(phase = 'snapshot_unavailable_allow_random_spawn') AS random_spawn_allowed,
+         BOOL_OR(phase IN ('player_data_not_found_snapshot_fallback', 'vanilla_no_save_snapshot_fallback')) AS snapshot_attempted,
          BOOL_OR(phase = 'vanilla_restored' OR phase = 'vanilla_character_loaded_ok') AS vanilla_restored,
          BOOL_OR(severity IN ('error', 'warning') AND phase <> 'snapshot_login_applied') AS has_warning,
          MIN(occurred_at) AS first_event_at,
-         MAX(occurred_at) AS last_event_at
+         MAX(occurred_at) AS last_event_at,
+         MAX(CASE WHEN phase = 'vanilla_restored' OR phase = 'vanilla_character_loaded_ok' THEN occurred_at END) AS vanilla_at,
+         MAX(CASE WHEN phase IN ('snapshot_restored', 'snapshot_login_applied', 'snapshot_loadout_applied') THEN occurred_at END) AS snapshot_at
        FROM server_restart_events
        WHERE restart_id = $1
          AND (player_uid IS NOT NULL OR player_id IS NOT NULL OR player_name IS NOT NULL)

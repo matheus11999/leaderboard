@@ -8,6 +8,7 @@ const db = require('./db');
 const logger = require('./lib/logger');
 const { seedAdminFromEnv } = require('./auth');
 const { ensureSchema } = require('./schema');
+const { startBackupScheduler } = require('./lib/serverBackups');
 
 const ingestRouter      = require('./routes/ingest');
 const leaderboardRouter = require('./routes/leaderboard');
@@ -37,6 +38,7 @@ async function bootstrap() {
   await ensureSchema();
   await seedAdminFromEnv();
   scheduleViewRefresh();
+  startBackupScheduler();
 
   const app = express();
   app.disable('x-powered-by');

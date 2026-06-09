@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css?v=20260607-restarts">
+<link rel="stylesheet" href="admin.css?v=20260609-backups">
 </head>
 <body>
 
@@ -58,6 +58,7 @@
   <nav class="tabs">
     <button class="tab is-active" data-tab="overview">OVERVIEW</button>
     <button class="tab" data-tab="servers">SERVIDORES</button>
+    <button class="tab" data-tab="backups">BACKUPS</button>
     <button class="tab" data-tab="restarts">RESTARTS</button>
     <button class="tab" data-tab="players">JOGADORES</button>
     <button class="tab" data-tab="kills">MORTES</button>
@@ -112,6 +113,59 @@
         <button class="btn-ghost" data-refresh="servers">ATUALIZAR</button>
       </div>
       <div class="table-wrap"><table id="servers-table" class="data-table"></table></div>
+    </section>
+
+    <!-- BACKUPS -->
+    <section class="tab-pane" id="pane-backups">
+      <h2 class="pane-title">BACKUPS <span class="accent">// SFTP</span></h2>
+      <div class="settings-card backup-settings-card">
+        <div class="settings-grid">
+          <label class="field">
+            <span class="field-label">SERVIDOR</span>
+            <select id="backup-server" class="select-input"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">HOST SFTP</span>
+            <input type="text" id="backup-host" placeholder="bh21a.serverse.cloud" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span class="field-label">PORTA</span>
+            <input type="number" id="backup-port" min="1" max="65535" value="22" />
+          </label>
+          <label class="field">
+            <span class="field-label">USUARIO</span>
+            <input type="text" id="backup-username" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span class="field-label">SENHA</span>
+            <input type="password" id="backup-password" placeholder="deixe vazio para manter" autocomplete="new-password" />
+          </label>
+          <label class="field">
+            <span class="field-label">PASTA REMOTA</span>
+            <input type="text" id="backup-remote-path" value="/home/container/profile/profile" />
+          </label>
+          <label class="field">
+            <span class="field-label">INTERVALO</span>
+            <input type="number" id="backup-schedule-minutes" min="15" max="1440" step="5" value="60" />
+          </label>
+          <label class="check-field">
+            <input type="checkbox" id="backup-enabled" />
+            <span>Ativo</span>
+          </label>
+        </div>
+        <div class="toolbar">
+          <button class="btn-primary" id="backup-save">SALVAR CONFIG</button>
+          <button class="btn-ghost" id="backup-test">TESTAR CONEXAO</button>
+          <button class="btn-ghost" id="backup-run">BACKUP AGORA</button>
+          <span class="form-status" id="backup-status"></span>
+        </div>
+      </div>
+      <div class="backup-grid" id="backup-configs"></div>
+      <div class="toolbar">
+        <button class="btn-ghost" data-refresh="backups">ATUALIZAR</button>
+      </div>
+      <div class="table-wrap"><table id="backups-table" class="data-table"></table></div>
+      <div class="pager" id="backups-pager"></div>
     </section>
 
     <!-- RESTARTS -->
@@ -371,6 +425,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20260607-restarts"></script>
+<script src="admin.js?v=20260609-backups"></script>
 </body>
 </html>

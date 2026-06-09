@@ -28,6 +28,7 @@ const state = {
   paymentsRefreshing: false,
   pagers: {
     servers:  { offset: 0, limit: 500, total: 0 },
+    backups:  { offset: 0, limit: 50, total: 0 },
     restarts: { offset: 0, limit: 50, total: 0 },
     players:  { offset: 0, limit: 50, total: 0 },
     kills:    { offset: 0, limit: 50, total: 0 },
@@ -162,6 +163,7 @@ async function refreshTab(name) {
     switch (name) {
       case 'overview': await loadOverview(); break;
       case 'servers':  await loadServers(); break;
+      case 'backups':  await loadBackups(); break;
       case 'restarts': await loadRestarts(); break;
       case 'players':  await loadPlayers(); break;
       case 'kills':    await loadKills(); break;
@@ -567,6 +569,154 @@ async function loadServers() {
   ]);
 }
 
+// ---------- backups ----------
+async function loadBackups() {
+  await loadBackupConfig();
+  await loadBackupRows();
+}
+
+async function loadBackupConfig() {
+  const serverId = document.getElementById('backup-server')?.value || state.selectedServer;
+  const d = await api('GET', '/backups/' + encodeURIComponent(serverId) + '/config');
+  const c = d.config || {};
+  document.getElementById('backup-host').value = c.host || '';
+  document.getElementById('backup-port').value = c.port || 22;
+  document.getElementById('backup-username').value = c.username || '';
+  document.getElementById('backup-password').value = '';
+  document.getElementById('backup-password').placeholder = c.has_password ? 'senha configurada; deixe vazio para manter' : 'senha SFTP';
+  document.getElementById('backup-remote-path').value = c.remote_path || '/home/container/profile/profile';
+  document.getElementById('backup-schedule-minutes').value = c.schedule_minutes || 60;
+  document.getElementById('backup-enabled').checked = !!c.enabled;
+  renderBackupCards();
+}
+
+async function renderBackupCards() {
+  const box = document.getElementById('backup-configs');
+  if (!box) return;
+  try {
+    const d = await api('GET', '/backups/configs');
+    const rows = d.rows || [];
+    box.innerHTML = rows.map((r) => {
+      const active = r.server_id === state.selectedServer;
+      const statusCls = r.last_backup_status === 'success' ? 'is-ok' : (r.last_backup_status === 'failed' ? 'is-err' : '');
+      const testCls = r.last_test_ok === true ? 'is-ok' : (r.last_test_ok === false ? 'is-err' : '');
+      return `
+        <button type="button" class="backup-card ${active ? 'is-active' : ''}" data-backup-card="${escapeHtml(r.server_id)}">
+          <div class="backup-card-title">${escapeHtml(r.server_name || r.server_id)}</div>
+          <div class="backup-card-line"><span>Host</span><strong>${escapeHtml(r.host || 'sem config')}</strong></div>
+          <div class="backup-card-line"><span>Agenda</span><strong>${r.enabled ? `${Number(r.schedule_minutes || 60)} min` : 'off'}</strong></div>
+          <div class="backup-card-line"><span>Teste</span><strong class="pill ${testCls}">${r.last_test_ok == null ? '-' : (r.last_test_ok ? 'OK' : 'ERRO')}</strong></div>
+          <div class="backup-card-line"><span>Ultimo</span><strong class="pill ${statusCls}">${escapeHtml(r.last_backup_status || '-')}</strong></div>
+        </button>
+      `;
+    }).join('') || '<div class="table-state">Nenhum servidor cadastrado.</div>';
+    for (const btn of box.querySelectorAll('[data-backup-card]')) {
+      btn.addEventListener('click', async () => {
+        state.selectedServer = btn.dataset.backupCard || state.selectedServer;
+        for (const pager of Object.values(state.pagers)) pager.offset = 0;
+        renderServerSelects();
+        await loadBackups();
+      });
+    }
+  } catch (err) {
+    box.innerHTML = `<div class="table-state">Erro ao carregar configs: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadBackupRows() {
+  const pager = state.pagers.backups;
+  const q = new URLSearchParams({ limit: pager.limit, offset: pager.offset });
+  const d = await api('GET', withServer('/backups?' + q));
+  pager.total = d.total || 0;
+  renderTable('backups-table', [
+    { key: 'started_at', label: 'INICIO', render: v => fmtDate(v) },
+    { key: 'server_name', label: 'SERVIDOR', render: (_v, r) => escapeHtml(r.server_name || r.server_id) },
+    { key: 'status', label: 'STATUS', render: v => backupStatusPill(v) },
+    { key: 'filename', label: 'ARQUIVO', render: v => escapeHtml(v || '-') },
+    { key: 'file_size', label: 'TAMANHO', render: v => formatBytes(v) },
+    { key: 'duration_ms', label: 'TEMPO', render: v => v ? `${Math.round(Number(v) / 1000)}s` : '-' },
+    { key: 'created_by', label: 'ORIGEM', render: v => escapeHtml(v || '-') },
+    { key: 'error', label: 'ERRO', render: v => v ? `<span class="pill is-err">${escapeHtml(v)}</span>` : '<span class="pill is-ok">-</span>' },
+  ], d.rows || [], [
+    { label: 'BAIXAR', onClick: r => downloadBackup(r) },
+  ]);
+  renderPager('backups-pager', 'backups');
+}
+
+function backupStatusPill(status) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'success') return '<span class="pill is-ok">OK</span>';
+  if (s === 'failed') return '<span class="pill is-err">ERRO</span>';
+  return '<span class="pill is-warn">RODANDO</span>';
+}
+
+function formatBytes(value) {
+  const n = Number(value || 0);
+  if (!n) return '-';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+async function saveBackupConfig() {
+  const status = document.getElementById('backup-status');
+  const serverId = document.getElementById('backup-server').value || state.selectedServer;
+  const body = {
+    host: document.getElementById('backup-host').value.trim(),
+    port: Number(document.getElementById('backup-port').value || 22),
+    username: document.getElementById('backup-username').value.trim(),
+    password: document.getElementById('backup-password').value,
+    remote_path: document.getElementById('backup-remote-path').value.trim() || '/home/container/profile/profile',
+    schedule_minutes: Number(document.getElementById('backup-schedule-minutes').value || 60),
+    enabled: document.getElementById('backup-enabled').checked,
+  };
+  try {
+    await api('PUT', '/backups/' + encodeURIComponent(serverId) + '/config', body);
+    document.getElementById('backup-password').value = '';
+    status.textContent = 'Config salva';
+    await loadBackups();
+  } catch (err) {
+    status.textContent = 'Erro: ' + err.message;
+  }
+}
+
+async function testBackupConnection() {
+  const status = document.getElementById('backup-status');
+  const serverId = document.getElementById('backup-server').value || state.selectedServer;
+  try {
+    status.textContent = 'Testando...';
+    const r = await api('POST', '/backups/' + encodeURIComponent(serverId) + '/test');
+    status.textContent = `Conexao OK (.save=${r.save_exists ? 'sim' : 'nao'}, BrasilZ=${r.brasilz_exists ? 'sim' : 'nao'})`;
+    await loadBackups();
+  } catch (err) {
+    status.textContent = 'Erro SFTP: ' + err.message;
+    await renderBackupCards();
+  }
+}
+
+async function runBackupNow() {
+  const status = document.getElementById('backup-status');
+  const serverId = document.getElementById('backup-server').value || state.selectedServer;
+  try {
+    status.textContent = 'Criando backup...';
+    await api('POST', '/backups/' + encodeURIComponent(serverId) + '/run');
+    status.textContent = 'Backup criado';
+    await loadBackups();
+  } catch (err) {
+    status.textContent = 'Erro backup: ' + err.message;
+    await loadBackupRows();
+  }
+}
+
+function downloadBackup(row) {
+  if (row.status !== 'success') {
+    alert('Backup ainda nao esta disponivel para download.');
+    return;
+  }
+  window.location.href = API_BASE + '/backups/' + encodeURIComponent(row.id) + '/download';
+}
+
 // ---------- restarts ----------
 async function loadRestarts() {
   const pager = state.pagers.restarts;
@@ -606,7 +756,43 @@ function restartRestorePill(p) {
   if (p.snapshot_login_applied && p.vanilla_restored) return '<span class="pill is-warn">SNAPSHOT TESTE</span><span class="pill is-ok">VANILLA</span>';
   if (p.snapshot_restored) return '<span class="pill is-warn">SNAPSHOT</span>';
   if (p.vanilla_restored) return '<span class="pill is-ok">VANILLA</span>';
+  if (p.random_spawn_allowed) return '<span class="pill">SPAWN NORMAL</span>';
   return '<span class="pill">-</span>';
+}
+
+function restartPlayerMethod(p) {
+  if (p.snapshot_login_applied && p.vanilla_restored) {
+    return { key: 'snapshot', label: 'SNAPSHOT', detail: 'snapshot aplicado depois do vanilla', cls: 'is-warn' };
+  }
+  if (p.snapshot_restored || p.snapshot_loadout_applied || p.snapshot_loaded) {
+    return { key: 'snapshot', label: 'SNAPSHOT', detail: p.snapshot_at ? fmtDate(p.snapshot_at) : 'fallback aplicado', cls: 'is-warn' };
+  }
+  if (p.vanilla_restored) {
+    return { key: 'vanilla', label: 'VANILLA', detail: p.vanilla_at ? fmtDate(p.vanilla_at) : 'restore padrao do jogo', cls: 'is-ok' };
+  }
+  if (p.random_spawn_allowed) {
+    return { key: 'normal', label: 'SPAWN NORMAL', detail: 'sem snapshot salvo para esse jogador', cls: '' };
+  }
+  if (p.restore_blocked || p.queue_issue) {
+    return { key: 'blocked', label: 'BLOQUEADO', detail: 'entrada bloqueada pelo restore', cls: 'is-err' };
+  }
+  return { key: 'unknown', label: 'NAO INFORMADO', detail: 'sem evento de entrada nesse restart', cls: '' };
+}
+
+function restartPlayerKey(p) {
+  if (p.player_id !== undefined && p.player_id !== null) return 'player_id:' + String(p.player_id);
+  return p.player_uid || p.player_name || p.key || 'unknown';
+}
+
+function restartEventPlayerKey(ev) {
+  if (ev.player_id !== undefined && ev.player_id !== null) return 'player_id:' + String(ev.player_id);
+  return ev.player_uid || ev.player_name || 'unknown';
+}
+
+function restartMethodStats(players) {
+  const stats = { vanilla: 0, snapshot: 0, normal: 0, blocked: 0, unknown: 0 };
+  for (const p of players) stats[restartPlayerMethod(p).key] += 1;
+  return stats;
 }
 
 function restartPhaseLabel(phase) {
@@ -614,12 +800,18 @@ function restartPhaseLabel(phase) {
     boot_cleanup_finished: 'Boot liberado',
     queue_accepted: 'Entrou na fila',
     queue_released: 'Saiu da fila',
+    queue_rejected: 'Fila recusou',
+    restore_kicked: 'Kick de restore',
     vanilla_restored: 'Restore vanilla',
+    vanilla_character_loaded_ok: 'Personagem vanilla carregou',
+    player_data_not_found_snapshot_fallback: 'Vanilla sem save',
+    vanilla_no_save_snapshot_fallback: 'Tentou snapshot',
     snapshot_loaded: 'Snapshot carregado',
     snapshot_loadout_applied: 'Loadout do snapshot',
     snapshot_login_applied: 'Snapshot aplicado',
     snapshot_saved: 'Snapshot salvo',
     snapshot_restored: 'Snapshot emergencia',
+    snapshot_unavailable_allow_random_spawn: 'Spawn normal liberado',
   };
   return labels[phase] || phase || '-';
 }
@@ -631,14 +823,15 @@ async function showRestartDetail(id) {
     const players = d.players || [];
     const events = d.events || [];
     const raw = d.raw_events || [];
+    const methodStats = restartMethodStats(players);
 
     const cards = [
       { label: 'Jogadores monitorados', value: players.length || r.player_count || 0 },
-      { label: 'Salvos', value: r.saved_count || 0 },
+      { label: 'Entraram por vanilla', value: methodStats.vanilla },
+      { label: 'Entraram por snapshot', value: methodStats.snapshot },
+      { label: 'Spawn normal', value: methodStats.normal },
       { label: 'Snapshots salvos', value: r.snapshot_count || 0 },
-      { label: 'Snapshot aplicado', value: r.snapshot_restore_count || 0 },
-      { label: 'Problemas de fila', value: r.queue_reject_count || 0 },
-      { label: 'Alertas', value: r.error_count || 0 },
+      { label: 'Alertas / bloqueios', value: Number(r.error_count || 0) + methodStats.blocked },
     ].map(c => `
       <div class="restart-card">
         <div class="restart-card-label">${escapeHtml(c.label)}</div>
@@ -646,17 +839,33 @@ async function showRestartDetail(id) {
       </div>
     `).join('');
 
-    const playerRows = players.length ? players.map(p => `
-      <tr>
-        <td>${escapeHtml(p.player_name || p.player_uid || p.key || '-')}</td>
-        <td>${escapeHtml(p.player_uid || '-')}</td>
-        <td>${p.snapshot_saved ? '<span class="pill is-ok">SIM</span>' : '<span class="pill">NAO</span>'}</td>
-        <td>${restartRestorePill(p)}</td>
-        <td>${p.queue_issue ? '<span class="pill is-warn">SIM</span>' : '<span class="pill is-ok">NAO</span>'}</td>
-        <td>${p.has_warning ? '<span class="pill is-err">ALERTA</span>' : '<span class="pill is-ok">OK</span>'}</td>
-        <td>${escapeHtml(p.event_count || 0)}</td>
-      </tr>
-    `).join('') : '<tr><td colspan="7">Nenhum jogador registrado nesse restart.</td></tr>';
+    const playerCards = players.length ? players.map((p, idx) => {
+      const method = restartPlayerMethod(p);
+      return `
+        <div class="restart-player-card">
+          <div class="restart-player-main">
+            <div>
+              <div class="restart-player-name">${escapeHtml(p.player_name || p.player_uid || p.key || '-')}</div>
+              <div class="restart-player-uid">${escapeHtml(p.player_uid || 'UID nao informado')}</div>
+            </div>
+            <div class="restart-player-method">
+              <span class="pill ${method.cls}">${escapeHtml(method.label)}</span>
+              <div class="muted">${escapeHtml(method.detail)}</div>
+            </div>
+          </div>
+          <div class="restart-player-tags">
+            ${p.snapshot_saved ? '<span class="pill is-ok">SNAP SALVO</span>' : '<span class="pill">SEM SNAP</span>'}
+            ${p.has_warning ? '<span class="pill is-err">ALERTA</span>' : '<span class="pill is-ok">OK</span>'}
+            ${p.snapshot_attempted ? '<span class="pill is-warn">FALLBACK TENTADO</span>' : ''}
+          </div>
+          <div class="restart-player-meta">
+            <span>${escapeHtml(p.event_count || 0)} eventos</span>
+            <span>ultimo: ${fmtRelative(p.last_event_at)}</span>
+            <button class="row-btn" data-restart-player-log="${idx}">VER LOGS</button>
+          </div>
+        </div>
+      `;
+    }).join('') : '<div class="restart-empty">Nenhum jogador registrado nesse restart.</div>';
 
     const eventRows = events.length ? events.map(ev => `
       <tr>
@@ -685,26 +894,42 @@ async function showRestartDetail(id) {
             <div class="restart-title">${escapeHtml(r.server_name || r.server_id || '')}</div>
             <div class="muted">${escapeHtml(r.restart_key || '')} | ${fmtDate(r.started_at)} | ${restartStatusPill(r.status)}</div>
           </div>
+          <button class="row-btn" id="restart-show-all-logs">VER LOGS</button>
         </div>
         <div class="restart-grid">${cards}</div>
         <h3>Jogadores</h3>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>JOGADOR</th><th>UID</th><th>SNAPSHOT SALVO</th><th>COMO ENTROU</th><th>FILA</th><th>STATUS</th><th>EVENTOS</th></tr></thead>
-          <tbody>${playerRows}</tbody>
-        </table></div>
-        <h3>Timeline</h3>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>HORA</th><th>NIVEL</th><th>FASE</th><th>JOGADOR</th><th>MOTIVO</th><th>DETALHE</th></tr></thead>
-          <tbody>${eventRows}</tbody>
-        </table></div>
-        <h3>Raw events proximos</h3>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>HORA</th><th>TIPO</th><th>PROC</th><th>ERRO</th></tr></thead>
-          <tbody>${rawRows}</tbody>
-        </table></div>
+        <div class="restart-player-list">${playerCards}</div>
+        <div class="restart-logs is-hidden" id="restart-logs">
+          <h3>Timeline</h3>
+          <div class="table-wrap"><table class="data-table">
+            <thead><tr><th>HORA</th><th>NIVEL</th><th>FASE</th><th>JOGADOR</th><th>MOTIVO</th><th>DETALHE</th></tr></thead>
+            <tbody>${eventRows}</tbody>
+          </table></div>
+          <h3>Logs brutos</h3>
+          <div class="table-wrap"><table class="data-table">
+            <thead><tr><th>HORA</th><th>TIPO</th><th>PROC</th><th>ERRO</th></tr></thead>
+            <tbody>${rawRows}</tbody>
+          </table></div>
+        </div>
       </div>
     `;
     showHtmlModal('Restart #' + id, html);
+    const allLogsBtn = document.getElementById('restart-show-all-logs');
+    const logsBox = document.getElementById('restart-logs');
+    if (allLogsBtn && logsBox) {
+      allLogsBtn.addEventListener('click', () => {
+        logsBox.classList.toggle('is-hidden');
+        allLogsBtn.textContent = logsBox.classList.contains('is-hidden') ? 'VER LOGS' : 'OCULTAR LOGS';
+      });
+    }
+    for (const btn of document.querySelectorAll('[data-restart-player-log]')) {
+      btn.addEventListener('click', () => {
+        const p = players[Number(btn.dataset.restartPlayerLog)];
+        const key = restartPlayerKey(p || {});
+        const playerEvents = events.filter(ev => restartEventPlayerKey(ev) === key);
+        showJson('Logs de ' + (p?.player_name || p?.player_uid || key), playerEvents);
+      });
+    }
     for (const btn of document.querySelectorAll('[data-restart-event-json]')) {
       btn.addEventListener('click', () => {
         const ev = events.find(x => String(x.id) === btn.dataset.restartEventJson);
@@ -749,6 +974,13 @@ function renderServerSelects() {
     const paymentOptions = state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`).join('');
     payment.innerHTML = paymentOptions || `<option value="${DEFAULT_SERVER_ID}">${DEFAULT_SERVER_ID}</option>`;
     payment.value = state.selectedServer;
+  }
+
+  const backup = document.getElementById('backup-server');
+  if (backup) {
+    const backupOptions = state.servers.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}</option>`).join('');
+    backup.innerHTML = backupOptions || `<option value="${DEFAULT_SERVER_ID}">${DEFAULT_SERVER_ID}</option>`;
+    backup.value = state.selectedServer;
   }
 }
 
@@ -1253,6 +1485,15 @@ function bindUI() {
     });
   }
   document.getElementById('server-save').addEventListener('click', saveServer);
+  document.getElementById('backup-server').addEventListener('change', () => {
+    state.selectedServer = document.getElementById('backup-server').value || state.selectedServer;
+    state.pagers.backups.offset = 0;
+    renderServerSelects();
+    loadBackups();
+  });
+  document.getElementById('backup-save').addEventListener('click', saveBackupConfig);
+  document.getElementById('backup-test').addEventListener('click', testBackupConnection);
+  document.getElementById('backup-run').addEventListener('click', runBackupNow);
   for (const id of ['players-banned', 'kills-type', 'sessions-open', 'shop-purchase', 'bounty-claimed', 'payments-claimed', 'missions-active', 'events-type', 'events-processed', 'events-error']) {
     document.getElementById(id).addEventListener('change', () => {
       state.pagers[state.current].offset = 0;

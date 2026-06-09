@@ -371,7 +371,7 @@ router.get('/backups', async (req, res) => {
 router.get('/backups/:serverId/config', async (req, res) => {
   const serverId = normalizeServerId(req.params.serverId);
   try {
-    await ensureServer(serverId);
+    await ensureServer(db, serverId);
     const row = await serverBackups.getConfig(serverId);
     res.json({ config: serverBackups.publicConfig(row) || { server_id: serverId, port: 22, remote_path: '/home/container/profile/profile', enabled: false, schedule_minutes: 60, has_password: false } });
   } catch (err) {
@@ -382,7 +382,7 @@ router.get('/backups/:serverId/config', async (req, res) => {
 router.put('/backups/:serverId/config', express.json(), async (req, res) => {
   const serverId = normalizeServerId(req.params.serverId);
   try {
-    await ensureServer(serverId);
+    await ensureServer(db, serverId);
     const config = await serverBackups.upsertConfig(serverId, req.body || {});
     res.json({ config });
   } catch (err) {
